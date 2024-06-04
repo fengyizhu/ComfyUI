@@ -476,9 +476,25 @@ class PromptServer():
                 if valid[0]:
                     prompt_id = str(uuid.uuid4())
                     outputs_to_execute = valid[2]
-                    self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute))
+
+                    class notify():
+                        def __init__(self, web):
+                            self.result = None
+                            self.web = web
+
+                        def put(self, result):
+                            logging.info(f"{prompt_id} put result {result}")
+                            self.result = result
+                        async def get(self):
+                            while self.result is None:
+                                await asyncio.sleep(0.1)
+                            logging.info(f"{prompt_id} get result {self.result}")
+                            return web.json_response(self.result)
+
+                    callback = notify(web)
+                    self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, callback))
                     response = {"prompt_id": prompt_id, "number": number, "node_errors": valid[3]}
-                    return web.json_response(response)
+                    return await callback.get()
                 else:
                     logging.warning("invalid prompt: {}".format(valid[1]))
                     return web.json_response({"error": valid[1], "node_errors": valid[3]}, status=400)

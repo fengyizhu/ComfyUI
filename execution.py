@@ -736,7 +736,7 @@ class PromptQueue:
                     return None
             item = heapq.heappop(self.queue)
             i = self.task_counter
-            self.currently_running[i] = copy.deepcopy(item)
+            self.currently_running[i] = copy.deepcopy(item[:4])
             self.task_counter += 1
             self.server.queue_updated()
             return (item, i)
