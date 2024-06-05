@@ -118,6 +118,9 @@ def prompt_worker(q, server):
                             messages=e.status_messages))
             if server.client_id is not None:
                 server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
+            call_back = item[5]
+            if call_back is not None:
+                call_back.put(e.outputs_ui)
 
             current_time = time.perf_counter()
             execution_time = current_time - execution_start_time
