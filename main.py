@@ -120,7 +120,9 @@ def prompt_worker(q, server):
                 server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
             call_back = item[5]
             if call_back is not None:
-                call_back.put(e.outputs_ui)
+                for key, value in e.outputs_ui.items():
+                    if "image_base64" in value:
+                        call_back.put({"image_base64":value["image_base64"][0]})
 
             current_time = time.perf_counter()
             execution_time = current_time - execution_start_time
