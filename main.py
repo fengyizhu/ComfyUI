@@ -6,6 +6,8 @@ import importlib.util
 import folder_paths
 import time
 
+from logger import set_request_context
+
 def execute_prestartup_script():
     def execute_script(script_path):
         module_name = os.path.splitext(script_path)[0]
@@ -104,6 +106,7 @@ def prompt_worker(q, server):
         queue_item = q.get(timeout=timeout)
         if queue_item is not None:
             item, item_id = queue_item
+            set_request_context(item[3]['client_id'])
             execution_start_time = time.perf_counter()
             prompt_id = item[1]
             server.last_prompt_id = prompt_id
