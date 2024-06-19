@@ -14,7 +14,8 @@ class ModelCache:
     def __init__(self):
         self._cache = OrderedDict()
         # ignore gpu and highvram state, may cause OOM error
-        self.cpu_device_size = psutil.virtual_memory().total * 0.8
+        # self.cpu_device_size = psutil.virtual_memory().total * 0.8
+        self.cpu_device_size = 100
         self.gpu_device_size = GPUtil.getGPUs()[3].memoryTotal
         self.gpu_cache = []
         self.cache_size = 0
@@ -27,20 +28,13 @@ class ModelCache:
         return self._cache[key]
 
     def is_model_in_cache(self, key):
-        return key in self.cache_pool
-    
-    def unload_last_model(self):
-        if self.cache_size == 0:
-            return
+        return key in self._cache
 
-        self.cache_size -= sys.getsizeof(self.cache_pool.peekitem(last=False)[1])
-        self.free_one_model_cache()
-
-    def current_device_size(self):
-        return psutil.virtual_memory().total - self.cache_size
+    def current_cpu_device_size(self):
+        return psutil.virtual_memory().used
 
     def current_gpu_device_size(self):
-        return GPUtil.getGPUs()[3].memoryTotal.memoryUsed
+        return GPUtil.getGPUs()[3].memoryUsed / GPUtil.getGPUs()[3].memoryTotal
     
     def check_model_size(self, model):
         if sys.getsizeof(model) >= self.cpu_device_size:
@@ -141,8 +135,8 @@ class ModelCache:
         if self.cache_size == 0:
             return
 
-        self.cache_size -= sys.getsizeof(self.cache_pool.peekitem(last=False)[1])
         cache_k, item = self._cache.popitem(last=False)
+        self.cache_size -= sys.getsizeof(item)
         item.pop("sd", None)
 
         for k in list(item.keys()):
