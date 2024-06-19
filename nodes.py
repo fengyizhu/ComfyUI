@@ -684,8 +684,6 @@ class VAELoader:
 
     #TODO: scale factor?
     def load_vae(self, vae_name):
-        if vae_name in model_cache:
-            return (model_cache[vae_name],)
         
         if vae_name in ["taesd", "taesdxl"]:
             sd = self.load_taesd(vae_name)
@@ -693,7 +691,6 @@ class VAELoader:
             vae_path = folder_paths.get_full_path("vae", vae_name)
             sd = comfy.utils.load_torch_file(vae_path)
         vae = comfy.sd.VAE(sd=sd)
-        model_cache[vae_name] = vae
         return (vae,)
 
 class ControlNetLoader:
@@ -708,10 +705,8 @@ class ControlNetLoader:
 
     def load_controlnet(self, control_net_name):
         controlnet_path = folder_paths.get_full_path("controlnet", control_net_name)
-        if controlnet_path in model_cache:
-            return (model_cache[controlnet_path],)
+
         controlnet = comfy.controlnet.load_controlnet(controlnet_path)
-        model_cache[controlnet_path] = controlnet
         return (controlnet,)
 
 class DiffControlNetLoader:
@@ -820,10 +815,8 @@ class UNETLoader:
 
     def load_unet(self, unet_name):
         unet_path = folder_paths.get_full_path("unet", unet_name)
-        if unet_path in model_cache:
-            return (model_cache[unet_path],)
-        model = comfy.sd.load_unet(unet_path)
 
+        model = comfy.sd.load_unet(unet_path)
         return (model,)
 
 class CLIPLoader:
@@ -843,10 +836,8 @@ class CLIPLoader:
             clip_type = comfy.sd.CLIPType.STABLE_CASCADE
 
         clip_path = folder_paths.get_full_path("clip", clip_name)
-        if clip_path in model_cache:
-            return (model_cache[clip_path],)
+
         clip = comfy.sd.load_clip(ckpt_paths=[clip_path], embedding_directory=folder_paths.get_folder_paths("embeddings"), clip_type=clip_type)
-        model_cache[clip_path] = clip
         return (clip,)
 
 class DualCLIPLoader:
