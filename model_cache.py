@@ -48,6 +48,7 @@ class ModelCache:
 
 
     def current_gpu_device_size_ratio(self):
+        # TODO
         return torch.cuda.memory_allocated(current_device) / gpu_total_memory
 
 
@@ -156,4 +157,4 @@ class ModelCache:
         logging.info(f"Drop model cache: {model_name} ({dir_name})")
 
 
-model_cache = ModelCache(0.8,0.8)
+model_cache = ModelCache(args.cpu_device_size_ratio,args.gpu_device_size_ratio)
