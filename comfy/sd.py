@@ -467,12 +467,12 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
 
     if model_config.clip_vision_prefix is not None:
         if output_clipvision:
-            clipvision = model_cache.get_item(ckpt_path, 'clipvision')
+            clipvision = model_cache.get_cpu_model(ckpt_path, 'clipvision')
             if clipvision is None:
                 clipvision = clip_vision.load_clipvision_from_sd(sd, model_config.clip_vision_prefix, True)
 
     if output_model:
-        model_patcher = model_cache.get_item(ckpt_path, 'model')
+        model_patcher = model_cache.get_cpu_model(ckpt_path, 'model')
         inital_load_device = model_management.unet_inital_load_device(parameters, unet_dtype)
         if model_patcher is None:
             offload_device = model_management.unet_offload_device()
@@ -485,7 +485,7 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
             model_management.load_model_gpu(model_patcher)
 
     if output_vae:
-        vae = model_cache.get_item(ckpt_path, 'vae')
+        vae = model_cache.get_cpu_model(ckpt_path, 'vae')
         if vae is None:
             vae_sd = comfy.utils.state_dict_prefix_replace(sd, {k: "" for k in model_config.vae_key_prefix}, filter_keys=True)
             vae_sd = model_config.process_vae_state_dict(vae_sd)
@@ -493,7 +493,7 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
 
     clip_key = f"clip_{embedding_directory}"
     if output_clip:
-        clip = model_cache.get_item(ckpt_path, clip_key)
+        clip = model_cache.get_cpu_model(ckpt_path, clip_key)
         if clip is None:
             clip_target = model_config.clip_target()
             if clip_target is not None:
@@ -518,20 +518,18 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
         logging.debug("left over keys: {}".format(left_over))
 
     if model:
-        logging.info(f"cache model of : {ckpt_path}")
+        logging.debug(f"cache model of : {ckpt_path}")
         model_cache.cache_model(ckpt_path, model_patcher)
 
     if clip:
-        logging.info(f"cache clip of : {ckpt_path}")
+        logging.debug(f"cache clip of : {ckpt_path}")
         model_cache.cache_clip(ckpt_path, clip_key, clip)
     if vae:
-        logging.info(f"cache vae of : {ckpt_path}")
+        logging.debug(f"cache vae of : {ckpt_path}")
         model_cache.cache_vae(ckpt_path, vae)
     if clipvision:
-        logging.info(f"cache clipvision of : {ckpt_path}")
+        logging.debug(f"cache clipvision of : {ckpt_path}")
         model_cache.cache_clipvision(ckpt_path, clipvision)
-
-    model_cache.refresh_cache(clipvision)
 
     return (model_patcher, clip, vae, clipvision)
 

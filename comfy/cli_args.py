@@ -78,6 +78,7 @@ fpte_group.add_argument("--fp32-text-enc", action="store_true", help="Store text
 fpte_group.add_argument("--cpu-cache-model", action="store_true", help="Cache models on the CPU.")
 parser.add_argument("--cpu_device_size_ratio", type=float, default=0.8, help="The ratio of the model that will be stored on the CPU when using the CPU cache model option.")
 parser.add_argument("--gpu_device_size_ratio", type=float, default=0.8, help="The ratio of the model that will be stored on the GPU when using the GPU cache model option.")
+parser.add_argument("--gpu_limit_ratio", type=float, default=0.5, help="The limit ratio of the GPU memory that will be used for caching models.")
 
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml.")
 
