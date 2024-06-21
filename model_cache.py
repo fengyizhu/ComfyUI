@@ -206,6 +206,6 @@ class ModelCache:
         logging.info(f"Drop model cache: {model_name} ({dir_name})")
 
 
-model_cache = ModelCache(args.cpu_device_size_ratio, args.gpu_device_size_ratio, args.gpu_limit_ratio)
-logging.info(f"Cpu device size ratio: {args.cpu_device_size_ratio}, Gpu device size ratio: {args.gpu_device_size_ratio}, Gpu limit ratio: {args.gpu_limit_ratio}")
+model_cache = ModelCache(args.cpu_device_size_ratio, args.gpu_device_size_ratio, args.process_counts, args.gpu_limit_ratio)
+logging.info(f"Cpu device size ratio: {args.cpu_device_size_ratio}, Gpu device size ratio: {args.gpu_device_size_ratio}, Gpu limit ratio: {args.gpu_limit_ratio}, Process counts: {args.process_counts}")
 logging.info(f"Cpu device size: {model_cache.cpu_device_size}, Gpu device size: {model_cache.gpu_device_size}")
