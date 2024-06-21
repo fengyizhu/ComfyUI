@@ -5,6 +5,7 @@ from comfy.cli_args import args
 import comfy.utils
 import torch
 import sys
+from model_cache import model_cache
 
 class VRAMState(Enum):
     DISABLED = 0    #No vram present: no need to move models to vram
@@ -255,7 +256,7 @@ except:
 
 logging.info("VAE dtype: {}".format(VAE_DTYPE))
 
-current_loaded_models = []
+current_loaded_models = model_cache.gpu_cache
 
 def module_size(module):
     module_mem = 0
@@ -454,7 +455,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False):
             lowvram_model_memory = 64 * 1024 * 1024
 
         cur_loaded_model = loaded_model.model_load(lowvram_model_memory, force_patch_weights=force_patch_weights)
-        current_loaded_models.insert(0, loaded_model)
+        model_cache.put_gpu_cache(loaded_model, 0)
     return
 
 
@@ -462,19 +463,10 @@ def load_model_gpu(model):
     return load_models_gpu([model])
 
 def cleanup_models(keep_clone_weights_loaded=False):
-    to_delete = []
-    for i in range(len(current_loaded_models)):
-        if sys.getrefcount(current_loaded_models[i].model) <= 2:
-            if not keep_clone_weights_loaded:
-                to_delete = [i] + to_delete
-            #TODO: find a less fragile way to do this.
-            elif sys.getrefcount(current_loaded_models[i].real_model) <= 3: #references from .real_model + the .model
-                to_delete = [i] + to_delete
-
-    for i in to_delete:
-        x = current_loaded_models.pop(i)
-        x.model_unload()
-        del x
+    while model_cache.current_gpu_device_size_ratio_is_over():
+        if len(current_loaded_models) == 0:
+            break
+        model_cache.unload_last_gpu_model()
 
 def dtype_size(dtype):
     dtype_size = 4

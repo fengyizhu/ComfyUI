@@ -9,7 +9,7 @@ import logging
 from model_cache import model_cache
 
 def load_torch_file(ckpt, safe_load=False, device=None):
-    cache_sd = model_cache.get_item(ckpt, 'sd')
+    cache_sd = model_cache.get_cpu_model(ckpt, 'sd')
     if cache_sd:
         return cache_sd
     if device is None:
