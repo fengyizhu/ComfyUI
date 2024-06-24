@@ -454,6 +454,9 @@ class PromptServer():
             json_data =  await request.json()
             json_data = self.trigger_on_prompt(json_data)
 
+            if "client_id" in json_data:
+                logging.info(f"got prompt, task id: {json_data['client_id']}")
+
             if "number" in json_data:
                 number = float(json_data['number'])
             else:
