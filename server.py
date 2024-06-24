@@ -26,6 +26,7 @@ import comfy.utils
 import comfy.model_management
 
 from app.user_manager import UserManager
+from logger import set_request_context
 
 class BinaryEventTypes:
     PREVIEW_IMAGE = 1
@@ -448,13 +449,14 @@ class PromptServer():
 
         @routes.post("/prompt")
         async def post_prompt(request):
-            logging.info("got prompt")
+            # logging.info("got prompt")
             resp_code = 200
             out_string = ""
             json_data =  await request.json()
             json_data = self.trigger_on_prompt(json_data)
 
             if "client_id" in json_data:
+                set_request_context(json_data['client_id'])
                 logging.info(f"got prompt, task id: {json_data['client_id']}")
 
             if "number" in json_data:
