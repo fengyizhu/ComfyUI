@@ -1,9 +1,11 @@
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 import torch
 import psutil
 from collections import OrderedDict
 from pympler import asizeof
+
 from model_cache import ModelCache
 
 class TestModelCache(unittest.TestCase):
@@ -48,6 +50,27 @@ class TestModelCache(unittest.TestCase):
         self.model_cache.unload_last_cpu_model()
         self.assertNotIn('test_model_1', self.model_cache.cpu_cache)
         self.assertIn('test_model_2', self.model_cache.cpu_cache)
+
+    @patch('torch.cuda.memory_allocated', return_value=1024 * 1024 * 100)  # 100 MB
+    @patch('torch.cuda.get_device_properties')
+    def test_put_gpu_cache(self, mock_get_device_properties, mock_memory_allocated):
+        mock_get_device_properties.return_value.total_memory = 1024 * 1024 * 1000  # 1 GB
+        model = MagicMock()
+        model.model = 'test_model'
+        self.model_cache.put_gpu_cache(model)
+        self.assertIn(model, self.model_cache.gpu_cache)
+        self.assertIn('test_model', self.model_cache.gpu_cache_time)
+
+    def test_clean_up_gpu_models(self):
+        model = MagicMock()
+        model.model = 'test_model'
+        self.model_cache.gpu_cache.append(model)
+        self.model_cache.gpu_cache_time['test_model'] = time.time()
+
+        with patch.object(self.model_cache, 'current_gpu_device_size_ratio_is_over', return_value=True):
+            self.model_cache.clean_up_gpu_models()
+            self.assertNotIn(model, self.model_cache.gpu_cache)
+            self.assertNotIn('test_model', self.model_cache.gpu_cache_time)
 
 if __name__ == '__main__':
     unittest.main()

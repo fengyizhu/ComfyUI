@@ -463,10 +463,7 @@ def load_model_gpu(model):
     return load_models_gpu([model])
 
 def cleanup_models(keep_clone_weights_loaded=False):
-    while model_cache.current_gpu_device_size_ratio_is_over():
-        if len(current_loaded_models) == 0:
-            break
-        model_cache.unload_last_gpu_model()
+    model_cache.clean_up_gpu_models()
 
 def dtype_size(dtype):
     dtype_size = 4
