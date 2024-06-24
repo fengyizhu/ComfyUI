@@ -48,6 +48,13 @@ class ModelCache:
         return self.current_gpu_device_size_ratio() > self.gpu_limit_ratio
 
 
+    def clean_up_gpu_models(self):
+        while self.current_gpu_device_size_ratio_is_over():
+            if len(self.gpu_cache) == 0:
+                break
+            self.unload_last_gpu_model()
+
+
     def put_gpu_cache(self, model, pos=0):
         current_gpu_device_size = self.current_gpu_device_size()
 
