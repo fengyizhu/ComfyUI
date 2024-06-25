@@ -188,7 +188,7 @@ class ModelCache:
 
 
     def unload_last_cpu_model(self):
-        if self.__len__() == 0:
+        if self.__cpu_cache_len__() == 0:
             return
 
         unload_key = min(self.cpu_cache_time, key=self.cpu_cache_time.get)
