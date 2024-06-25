@@ -3,6 +3,7 @@ import copy
 import logging
 import threading
 import heapq
+import time
 import traceback
 import inspect
 from typing import List, Literal, NamedTuple, Optional
@@ -137,6 +138,7 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
                     return result
 
     input_data_all = None
+    start = time.time()
     try:
         input_data_all = get_input_data(inputs, class_def, unique_id, outputs, prompt, extra_data)
         if server.client_id is not None:
@@ -190,6 +192,8 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
         return (False, error_details, ex)
 
     executed.add(unique_id)
+
+    logging.info(f"Node {unique_id} {obj.__class__.__name__} executed in {time.time() - start} seconds")
 
     return (True, None, None)
 
