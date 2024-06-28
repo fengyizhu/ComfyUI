@@ -155,15 +155,13 @@ class ModelCache:
 
 
     def _put_cpu_cache_model(self, key, model, prop):
-        current_cpu_device_size = self.current_cpu_device_size()
-
-        while current_cpu_device_size > self.cpu_device_size:
+        while self.current_cpu_device_size() > self.cpu_device_size:
             if self.cpu_cache == {}:
-                logging.warning(f"Current used cpu device size {current_cpu_device_size} over cpu device size {self.cpu_device_size}, and cpu cache is none, cannot cache model")
+                logging.warning(f"Current used cpu device size {self.current_cpu_device_size()} over cpu device size {self.cpu_device_size}, and cpu cache is none, cannot cache model")
                 return
-            
+
             self.unload_last_cpu_model()
-            logging.debug(f"Current used cpu device size {current_cpu_device_size} over cpu device size {self.cpu_device_size}, unload last model from cache")
+            logging.debug(f"Current used cpu device size {self.current_cpu_device_size()} over cpu device size {self.cpu_device_size}, unload last model from cache")
 
         logging.info(f"Adding {prop}: {key} model to cache")
         self.cpu_cache.setdefault(key, {})[prop] = model
