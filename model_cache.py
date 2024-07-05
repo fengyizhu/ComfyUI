@@ -56,15 +56,13 @@ class ModelCache:
 
 
     def put_gpu_cache(self, model, pos=0):
-        current_gpu_device_size = self.current_gpu_device_size()
-
-        while current_gpu_device_size > self.gpu_device_size:
+        while self.current_gpu_device_size() > self.gpu_device_size:
             if self.gpu_cache == []:
-                logging.warning(f"Current used gpu device size {current_gpu_device_size} over gpu device size {self.gpu_device_size}, and gpu cache is none, cannot cache model")
+                logging.warning(f"Current used gpu device size {self.current_gpu_device_size()} over gpu device size {self.gpu_device_size}, and gpu cache is none, cannot cache model")
                 return
-            
+
             self.unload_last_gpu_model()
-            logging.debug(f"Current used gpu device size {current_gpu_device_size} over gpu device size {self.gpu_device_size}, unload last model from cache")
+            logging.debug(f"Current used gpu device size {self.current_gpu_device_size()} over gpu device size {self.gpu_device_size}, unload last model from cache")
 
         self.gpu_cache.insert(pos, model)
         self.gpu_cache_time[model.model] = time.time()
