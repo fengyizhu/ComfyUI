@@ -68,7 +68,7 @@ class TestModelCache(unittest.TestCase):
         self.model_cache.gpu_cache_time['test_model'] = time.time()
 
         with patch.object(self.model_cache, 'current_gpu_device_size_ratio_is_over', return_value=True):
-            self.model_cache.clean_up_gpu_models()
+            self.model_cache.cleanup_gpu_models()
             self.assertNotIn(model, self.model_cache.gpu_cache)
             self.assertNotIn('test_model', self.model_cache.gpu_cache_time)
 
