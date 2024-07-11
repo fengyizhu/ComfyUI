@@ -124,8 +124,8 @@ def prompt_worker(q, server):
             call_back = item[5]
             if call_back is not None:
                 for key, value in e.outputs_ui.items():
-                    if "image_base64" in value:
-                        call_back.put({"image_base64":value["image_base64"][0]})
+                    if "openapi_data" in value:
+                        call_back.put(value["openapi_data"][0])
 
             current_time = time.perf_counter()
             execution_time = current_time - execution_start_time
