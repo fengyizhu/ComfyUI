@@ -123,6 +123,10 @@ def prompt_worker(q, server):
                 server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
             call_back = item[5]
             if call_back is not None:
+                if not e.success:
+                    err = e.status_messages[2][1]
+                    response = dict(status=500, message=err['exception_message'],node_id=err['node_id'], timestamp=err['timestamp'])
+                    call_back.put(response)
                 for key, value in e.outputs_ui.items():
                     if "openapi_data" in value:
                         call_back.put(value["openapi_data"][0])
