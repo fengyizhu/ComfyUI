@@ -125,7 +125,8 @@ def prompt_worker(q, server):
             if call_back is not None:
                 if not e.success:
                     err = e.status_messages[2][1]
-                    response = dict(status=500, message=err['exception_message'],node_id=err['node_id'], timestamp=err['timestamp'])
+                    response = dict(status=500, message=err['exception_message'], node_id=err['node_id'],
+                                    timestamp=int(time.time()))
                     call_back.put(response)
                 for key, value in e.outputs_ui.items():
                     if "openapi_data" in value:
