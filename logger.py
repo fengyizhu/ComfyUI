@@ -42,3 +42,6 @@ logger = logging.getLogger()
 
 def set_request_context(task_id):
     task_id_var.set(task_id)
+
+def get_task_id():
+    return task_id_var.get()

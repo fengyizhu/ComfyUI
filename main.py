@@ -5,6 +5,9 @@ import os
 import importlib.util
 import folder_paths
 import time
+import json
+import uuid
+import requests
 
 from logger import set_request_context
 
@@ -92,76 +95,198 @@ def cuda_malloc_warning():
         if cuda_malloc_warning:
             logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
 
+model_list_str = os.getenv('MODEL_LIST', '')
+model_list = model_list_str.split(',')
+
 def prompt_worker(q, server):
     e = execution.PromptExecutor(server)
     last_gc_collect = 0
     need_gc = False
     gc_collect_interval = 10.0
+    update_status_url = args.update_task_status_url if args.update_task_status_url else None
+    task_id = None
+    output_data = None
 
     while True:
-        timeout = 1000.0
-        if need_gc:
-            timeout = max(gc_collect_interval - (current_time - last_gc_collect), 0.0)
+        try:
+            timeout = 3.0
+            if need_gc:
+                timeout = max(gc_collect_interval - (current_time - last_gc_collect), 0.0)
 
-        queue_item = q.get(timeout=timeout)
-        if queue_item is not None:
-            if q.get_current_queue_length() > 0:
-                    logging.info(f"Queue pending length is {q.get_current_queue_length()}")
-                    for i in q.get_current_queue():
-                        logging.info(f"Queue pending item is {i[0][3]['client_id']}")
-            item, item_id = queue_item
-            logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
-            set_request_context(item[3]['client_id'])
-            execution_start_time = time.perf_counter()
-            prompt_id = item[1]
-            server.last_prompt_id = prompt_id
+            queue_item = q.get(timeout=timeout)
+            if queue_item is not None:
+                if q.get_current_queue_length() > 0:
+                        logging.info(f"Queue pending length is {q.get_current_queue_length()}")
+                        for i in q.get_current_queue():
+                            logging.info(f"Queue pending item is {i[0][3]['client_id']}")
 
-            e.execute(item[2], prompt_id, item[3], item[4])
-            need_gc = True
-            q.task_done(item_id,
-                        e.outputs_ui,
-                        status=execution.PromptQueue.ExecutionStatus(
-                            status_str='success' if e.success else 'error',
-                            completed=e.success,
-                            messages=e.status_messages))
-            if server.client_id is not None:
-                server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
-            call_back = item[5]
-            if call_back is not None:
+                item, item_id = queue_item
+                set_request_context(item[3]['client_id'])
+                logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
+                execution_start_time = time.perf_counter()
+                prompt_id = item[1]
+                server.last_prompt_id = prompt_id
+
+                e.execute(item[2], prompt_id, item[3], item[4])
+                need_gc = True
+                q.task_done(item_id,
+                            e.outputs_ui,
+                            status=execution.PromptQueue.ExecutionStatus(
+                                status_str='success' if e.success else 'error',
+                                completed=e.success,
+                                messages=e.status_messages))
+
+                if server.client_id is not None:
+                    server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
+                call_back = item[5]
                 if not e.success:
                     err = e.status_messages[2][1]
                     response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
-                                    timestamp=int(time.time()))
-                    call_back.put(response)
+                                    timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
+
+                    if item[6]['callback_url'] != "":
+                        requests.post(url=item[6]['callback_url'], json=response)
+
+                    if args.get_task:
+                        resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "failed", "output_data": ""}).json()
+                    else:
+                        call_back.put(response)
                 for key, value in e.outputs_ui.items():
                     if "openapi_data" in value:
-                        call_back.put(value["openapi_data"][0])
+                        output_data = value["openapi_data"][0]
+                        if call_back is not None:
+                            call_back.put(output_data)
+                            break
 
+                if call_back is None and output_data is not None:
+                    output_data = json.dumps(output_data)
+                    requests.post(url=update_status_url, json={"task_id": task_id, "status": "completed", "output_data": output_data})
+
+                current_time = time.perf_counter()
+                execution_time = current_time - execution_start_time
+                logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
+
+                if args.get_task:
+                    get_task(q, server)
+            elif args.get_task:
+                get_task(q, server)
+            
+            flags = q.get_flags()
+            free_memory = flags.get("free_memory", False)
+
+            if flags.get("unload_models", free_memory):
+                comfy.model_management.unload_all_models()
+                need_gc = True
+                last_gc_collect = 0
+
+            if free_memory:
+                e.reset()
+                need_gc = True
+                last_gc_collect = 0
+
+            if need_gc:
+                current_time = time.perf_counter()
+                if (current_time - last_gc_collect) > gc_collect_interval:
+                    comfy.model_management.cleanup_models()
+                    gc.collect()
+                    comfy.model_management.soft_empty_cache()
+                    last_gc_collect = current_time
+                    need_gc = False
+        except Exception as err:
+            logging.error("Error in prompt worker: {}".format(err))
             current_time = time.perf_counter()
-            execution_time = current_time - execution_start_time
-            logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
+            continue
 
-        flags = q.get_flags()
-        free_memory = flags.get("free_memory", False)
+def get_task(q, server):
+    if args.get_task_url: 
+        get_url = args.get_task_url
+    if args.get_task_detail_url:
+        get_detail_url = args.get_task_detail_url
+    if args.update_task_status_url:
+        update_status_url = args.update_task_status_url
+    # post queue
+    req = {
+        "endpoint": "/v1/images/ke/generations",
+        "models": model_list,
+        "size": 1,
+        "level": 0
+    }
 
-        if flags.get("unload_models", free_memory):
-            comfy.model_management.unload_all_models()
-            need_gc = True
-            last_gc_collect = 0
+    try:
+        response = requests.post(url=get_url, json=req).json()
+    except requests.ConnectTimeout as err:
+        logging.error(f"Failed to get prompt from server: {err}")
+        return
 
-        if free_memory:
-            e.reset()
-            need_gc = True
-            last_gc_collect = 0
+    if response['data'] == []:
+        try:
+            req['level'] = 1
+            response = requests.post(url=get_url, json=req).json()
+        except requests.ConnectTimeout as err:
+            logging.error(f"Failed to get prompt from server: {err}")
+            return
+        if response['data'] == []:
+            return
 
-        if need_gc:
-            current_time = time.perf_counter()
-            if (current_time - last_gc_collect) > gc_collect_interval:
-                comfy.model_management.cleanup_models()
-                gc.collect()
-                comfy.model_management.soft_empty_cache()
-                last_gc_collect = current_time
-                need_gc = False
+    response = response['data'][0]
+    task_id = response['task_id']
+    status = response['status']
+    input_data = response['input_data']
+    input_file_id = response['input_file_id']
+    ak = response['ak']
+
+    if input_file_id is not None and input_file_id != "":
+        # todo file
+        resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "in_progress", "output_data": ""})
+        if resp.status_code != 200:
+            logging.error(f"Failed to update status to in_progress: {resp.status_code}")
+        return
+        openai.api_key = ak
+        response = openai.files.retrieve(input_file_id)
+
+
+    json_data = input_data
+    if "client_id" in json_data:
+        json_data['client_id'] = task_id
+        set_request_context(json_data['client_id'])
+        logging.info(f"got prompt, task id: {json_data['client_id']}")
+
+    if "number" in json_data:
+        number = float(json_data['number'])
+    else:
+        number = server.number
+        if "front" in json_data:
+            if json_data['front']:
+                number = -number
+
+        server.number += 1
+
+    if "prompt" in json_data:
+        prompt = json_data["prompt"]
+        valid = execution.validate_prompt(prompt)
+        extra_data = {}
+        if "extra_data" in json_data:
+            extra_data = json_data["extra_data"]
+
+        if "client_id" in json_data:
+            extra_data["client_id"] = json_data["client_id"]
+
+        if valid[0]:
+                # prompt_id = str(uuid.uuid4())
+                prompt_id = task_id
+                outputs_to_execute = valid[2]
+
+    openapi_item = {
+        "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
+        "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
+        "created": time.time()
+    }
+
+    resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "in_progress", "output_data": ""})
+    if resp.status_code != 200:
+        logging.error(f"Failed to update status to in_progress: {resp.status_code}")
+
+    q.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None, openapi_item))
 
 async def run(server, address='', port=8188, verbose=True, call_on_start=None):
     await asyncio.gather(server.start(address, port, verbose, call_on_start), server.publish_loop())
@@ -239,7 +364,13 @@ if __name__ == "__main__":
     server.add_routes()
     hijack_progress(server)
 
-    threading.Thread(target=prompt_worker, daemon=True, args=(q, server,)).start()
+    def monitor_thread(q, server):
+        while True:
+            worker_thread = threading.Thread(target=prompt_worker, args=(q, server,))
+            worker_thread.start()
+            worker_thread.join()
+
+    threading.Thread(target=monitor_thread, args=(q, server,)).start()
 
     if args.output_directory:
         output_dir = os.path.abspath(args.output_directory)

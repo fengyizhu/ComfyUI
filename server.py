@@ -471,6 +471,8 @@ class PromptServer():
                 self.number += 1
 
             openapi_item = {
+                "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
+                "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
                 "created": time.time()
             }
 
