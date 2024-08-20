@@ -127,6 +127,10 @@ parser.add_argument("--multi-user", action="store_true", help="Enables per-user 
 
 parser.add_argument("--verbose", action="store_true", help="Enables more debug prints.")
 
+parser.add_argument("--get-task", action="store_true", help="Pull task from the server.")
+parser.add_argument("--get-task-url", type=str, default=None, help="Pull task server's URL.")
+parser.add_argument("--get-task-detail-url", type=str, default=None, help="Pull task detail server's URL.")
+parser.add_argument("--update-task-status-url", type=str, default=None, help="Update task server's URL.")
 
 if comfy.options.args_parsing:
     args = parser.parse_args()

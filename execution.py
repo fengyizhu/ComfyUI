@@ -9,8 +9,11 @@ import inspect
 from typing import List, Literal, NamedTuple, Optional
 from exception import SERVING_ERROR_CODE, OpenapiProcessingException
 
+import json
+import requests
 import torch
 import nodes
+from comfy.cli_args import args
 
 import comfy.model_management
 
@@ -141,6 +144,11 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
     input_data_all = None
     start = time.time()
     try:
+        if args.get_task:
+            resp = requests.post(args.get_detail_url, json={"task_id": prompt_id}).json()
+            if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
+                raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")
+
         input_data_all = get_input_data(inputs, class_def, unique_id, outputs, prompt, extra_data)
         if server.client_id is not None:
             server.last_node_id = unique_id
