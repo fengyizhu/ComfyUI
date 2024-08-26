@@ -15,7 +15,7 @@ from comfy.cli_args import args
 
 current_device = torch.cuda.current_device()
 gpu_total_memory = torch.cuda.get_device_properties(current_device).total_memory
-cpu_total_memeory = psutil.virtual_memory().total
+cpu_total_memeory = psutil.virtual_memory().total / (1024 ** 3)
 
 class ModelCache:
     def __init__(self, cpu_device_size_ratio, gpu_device_size_ratio, process_counts=1, gpu_limit_ratio=0.5):
@@ -121,7 +121,7 @@ class ModelCache:
 
     def current_cpu_device_size(self):
         process = psutil.Process()
-        return process.memory_info().rss
+        return process.memory_info().rss / (1024 ** 3)
 
 
     def cache_model(self, key, model):
