@@ -7,6 +7,7 @@ import time
 import traceback
 import inspect
 from typing import List, Literal, NamedTuple, Optional
+from exception import SERVING_ERROR_CODE, OpenapiProcessingException
 
 import torch
 import nodes
@@ -156,12 +157,23 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
             outputs_ui[unique_id] = output_ui
             if server.client_id is not None:
                 server.send_sync("executed", { "node": unique_id, "output": output_ui, "prompt_id": prompt_id }, server.client_id)
+    except OpenapiProcessingException as iex:
+        logging.info("Processing interrupted")
+
+        error_details = {
+            "node_id": unique_id,
+            "exception_message": iex.message,
+            "code": iex.code
+        }
+
+        return (False, error_details, iex)
     except comfy.model_management.InterruptProcessingException as iex:
         logging.info("Processing interrupted")
 
         # skip formatting inputs/outputs
         error_details = {
             "node_id": unique_id,
+            "code": SERVING_ERROR_CODE
         }
 
         return (False, error_details, iex)
@@ -182,6 +194,7 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
         logging.error(traceback.format_exc())
 
         error_details = {
+            "code": SERVING_ERROR_CODE,
             "node_id": unique_id,
             "exception_message": str(ex),
             "exception_type": exception_type,
@@ -298,10 +311,21 @@ class PromptExecutor:
         # on the exception type
         if isinstance(ex, comfy.model_management.InterruptProcessingException):
             mes = {
+                "code": error["code"],
                 "prompt_id": prompt_id,
                 "node_id": node_id,
                 "node_type": class_type,
                 "executed": list(executed),
+            }
+            self.add_message("execution_interrupted", mes, broadcast=True)
+        elif isinstance(ex, OpenapiProcessingException):
+            mes = {
+                "prompt_id": prompt_id,
+                "node_id": node_id,
+                "node_type": class_type,
+                "executed": list(executed),
+                "exception_message": error["exception_message"],
+                "code": error["code"]
             }
             self.add_message("execution_interrupted", mes, broadcast=True)
         else:
@@ -311,6 +335,7 @@ class PromptExecutor:
                 "node_type": class_type,
                 "executed": list(executed),
 
+                "code": error["code"],
                 "exception_message": error["exception_message"],
                 "exception_type": error["exception_type"],
                 "traceback": error["traceback"],
