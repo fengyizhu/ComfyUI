@@ -105,7 +105,12 @@ def prompt_worker(q, server):
 
         queue_item = q.get(timeout=timeout)
         if queue_item is not None:
+            if q.get_current_queue_length() > 0:
+                    logging.info(f"Queue pending length is {q.get_current_queue_length()}")
+                    for i in q.get_current_queue():
+                        logging.info(f"Queue pending item is {i[0][3]['client_id']}")
             item, item_id = queue_item
+            logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
             set_request_context(item[3]['client_id'])
             execution_start_time = time.perf_counter()
             prompt_id = item[1]

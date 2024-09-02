@@ -799,6 +799,10 @@ class PromptQueue:
             for x in self.currently_running.values():
                 out += [x]
             return (out, copy.deepcopy(self.queue))
+            
+    def get_current_queue_length(self):
+        with self.mutex:
+            return len(self.queue)
 
     def get_tasks_remaining(self):
         with self.mutex:
