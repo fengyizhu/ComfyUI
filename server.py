@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+import time
 import traceback
 
 import nodes
@@ -469,6 +470,10 @@ class PromptServer():
 
                 self.number += 1
 
+            openapi_item = {
+                "created": time.time()
+            }
+
             if "prompt" in json_data:
                 prompt = json_data["prompt"]
                 valid = execution.validate_prompt(prompt)
@@ -499,7 +504,7 @@ class PromptServer():
                                 return web.json_response(self.result)
 
                         callback = notify(web)
-                        self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, callback))
+                        self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, callback, openapi_item))
                         
                         return await callback.get()
                     else:
@@ -508,7 +513,7 @@ class PromptServer():
                 if valid[0]:
                     prompt_id = str(uuid.uuid4())
                     outputs_to_execute = valid[2]
-                    self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None))
+                    self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None, openapi_item))
                     response = {"prompt_id": prompt_id, "number": number, "node_errors": valid[3]}
                     return web.json_response(response)
                 else:
