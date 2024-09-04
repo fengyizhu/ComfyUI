@@ -7,7 +7,7 @@ import time
 import traceback
 import inspect
 from typing import List, Literal, NamedTuple, Optional
-from exception import SERVING_ERROR_CODE, OpenapiProcessingException
+from exception import COMPLETED_CODE, SERVING_ERROR_CODE, OpenapiProcessingException
 
 import json
 import requests
@@ -145,7 +145,7 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
     start = time.time()
     try:
         if args.get_task:
-            resp = requests.post(args.get_detail_url, json={"task_id": prompt_id}).json()
+            resp = requests.post(args.get_task_detail_url, json={"task_id": prompt_id}).json()
             if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
                 raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")
 
