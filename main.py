@@ -117,8 +117,6 @@ def prompt_worker(q, server):
             if queue_item is not None:
                 if q.get_current_queue_length() > 0:
                         logging.info(f"Queue pending length is {q.get_current_queue_length()}")
-                        for i in q.get_current_queue():
-                            logging.info(f"Queue pending item is {i[0][3]['client_id']}")
 
                 item, item_id = queue_item
                 set_request_context(item[3]['client_id'])
