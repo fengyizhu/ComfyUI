@@ -109,7 +109,7 @@ def prompt_worker(q, server):
 
     while True:
         try:
-            timeout = 3.0
+            timeout = 0.5
             if need_gc:
                 timeout = max(gc_collect_interval - (current_time - last_gc_collect), 0.0)
 
@@ -120,6 +120,7 @@ def prompt_worker(q, server):
 
                 item, item_id = queue_item
                 set_request_context(item[3]['client_id'])
+                task_id = item[3]['client_id']
                 logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
                 execution_start_time = time.perf_counter()
                 prompt_id = item[1]
@@ -147,6 +148,7 @@ def prompt_worker(q, server):
 
                     if args.get_task:
                         resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "failed", "output_data": ""}).json()
+                        continue
                     else:
                         call_back.put(response)
                 for key, value in e.outputs_ui.items():
