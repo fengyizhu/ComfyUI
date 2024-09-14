@@ -13,7 +13,7 @@ from logger import set_request_context
 from comfy.cli_args import args
 from app.logger import setup_logger
 
-setup_logger(verbose=args.verbose)
+# setup_logger(verbose=args.verbose)
 
 
 def execute_prestartup_script():
@@ -156,7 +156,7 @@ def prompt_worker(q, server):
                     response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
                                     timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
 
-                    if item[6]['callback_url'] != "":
+                    if item[6]['callback_url']:
                         requests.post(url=item[6]['callback_url'], json=response)
 
                     if args.get_task:
@@ -164,7 +164,7 @@ def prompt_worker(q, server):
                         continue
                     else:
                         call_back.put(response)
-                for key, value in e.outputs_ui.items():
+                for key, value in e.history_result['outputs'].items():
                     if "openapi_data" in value:
                         output_data = value["openapi_data"][0]
                         if call_back is not None:

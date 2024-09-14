@@ -571,7 +571,7 @@ def load_state_dict_guess_config(ckpt_path, sd, output_vae=True, output_clip=Tru
         if model_patcher is None:
             model = model_config.get_model(sd, "model.diffusion_model.", device=inital_load_device)
             model.load_model_weights(sd, "model.diffusion_model.")
-            model_patcher = comfy.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=offload_device, current_device=inital_load_device)
+            model_patcher = comfy.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=offload_device)
             model = model_config.get_model(sd, diffusion_model_prefix, device=inital_load_device)
             model.load_model_weights(sd, diffusion_model_prefix)
         if inital_load_device != torch.device("cpu"):
@@ -589,10 +589,11 @@ def load_state_dict_guess_config(ckpt_path, sd, output_vae=True, output_clip=Tru
     if output_clip:
         clip = model_cache.get_cpu_model(ckpt_path, clip_key)
         if clip is None:
-            clip_target = model_config.clip_target()
+            clip_target = model_config.clip_target(state_dict=sd)
             if clip_target is not None:
                 clip_sd = model_config.process_clip_state_dict(sd)
                 if len(clip_sd) > 0:
+                    parameters = comfy.utils.calculate_parameters(clip_sd)
                     clip = CLIP(clip_target, embedding_directory=embedding_directory, tokenizer_data=clip_sd, parameters=parameters, model_options=te_model_options)
                     m, u = clip.load_sd(clip_sd, full_model=True)
                     if len(m) > 0:
@@ -606,25 +607,6 @@ def load_state_dict_guess_config(ckpt_path, sd, output_vae=True, output_clip=Tru
                         logging.debug("clip unexpected {}:".format(u))
                 else:
                     logging.warning("no CLIP/text encoder weights in checkpoint, the text encoder model will not be loaded.")
-
-        clip_target = model_config.clip_target(state_dict=sd)
-        if clip_target is not None:
-            clip_sd = model_config.process_clip_state_dict(sd)
-            if len(clip_sd) > 0:
-                parameters = comfy.utils.calculate_parameters(clip_sd)
-                clip = CLIP(clip_target, embedding_directory=embedding_directory, tokenizer_data=clip_sd, parameters=parameters, model_options=te_model_options)
-                m, u = clip.load_sd(clip_sd, full_model=True)
-                if len(m) > 0:
-                    m_filter = list(filter(lambda a: ".logit_scale" not in a and ".transformer.text_projection.weight" not in a, m))
-                    if len(m_filter) > 0:
-                        logging.warning("clip missing: {}".format(m))
-                    else:
-                        logging.debug("clip missing: {}".format(m))
-
-                if len(u) > 0:
-                    logging.debug("clip unexpected {}:".format(u))
-            else:
-                logging.warning("no CLIP/text encoder weights in checkpoint, the text encoder model will not be loaded.")
 
     left_over = sd.keys()
     if len(left_over) > 0:
