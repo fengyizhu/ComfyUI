@@ -28,6 +28,7 @@ import comfy.model_management
 
 from app.user_manager import UserManager
 from logger import set_request_context
+from openapi_utils import build_openapi_item
 
 class BinaryEventTypes:
     PREVIEW_IMAGE = 1
@@ -470,11 +471,7 @@ class PromptServer():
 
                 self.number += 1
 
-            openapi_item = {
-                "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
-                "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
-                "created": time.time()
-            }
+            openapi_item = build_openapi_item(json_data, False)
 
             if "prompt" in json_data:
                 prompt = json_data["prompt"]

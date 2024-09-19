@@ -10,7 +10,7 @@ import uuid
 import requests
 
 from logger import set_request_context
-from openapi_utils import set_sync, get_sync, get_pull_task, set_pull_task
+from openapi_utils import get_global_queue_task_id, queue_update_request, build_openapi_item, set_global_queue_task_id
 
 def execute_prestartup_script():
     def execute_script(script_path):
@@ -98,6 +98,88 @@ def cuda_malloc_warning():
 
 model_list_str = os.getenv('MODEL_LIST', '')
 model_list = model_list_str.split(',')
+TASK_FAILED = "failed"
+TASK_COMPLETED = "completed"
+TASK_IN_PROGRESS = "in_progress"
+TASK_CANCELLED = "cancelled"
+
+def post_request(url, body):
+    response = requests.post(url=url, json=body)
+    return response
+
+def handle_failed_execution(e, item, pull_task, task_id):
+    err = e.status_messages[2][1]
+    response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
+                        timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
+    queue_response = None
+    if pull_task:
+        queue_response = queue_update_request(get_global_queue_task_id(), TASK_FAILED, response)
+    return response, queue_response
+
+def handle_successful_execution(e, item, pull_task):
+    for key, value in e.outputs_ui['outputs'].items():
+        if "openapi_data" in value:
+            output_data = value["openapi_data"][0]
+            output_data["model"] = item[6]["model"]
+            response = output_data
+    queue_response = None
+    if pull_task:
+        update_status_data = json.dumps(output_data['pull_task_data'])
+        queue_response = queue_update_request(get_global_queue_task_id(), TASK_COMPLETED, update_status_data)
+
+    return response, queue_response
+
+
+def handle_execution_result(e, item, server, update_status_url, task_id):
+    if server.client_id is not None:
+        prompt_id = item[1]
+        server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
+    call_back = item[5]
+    callback_url = item[6]['callback_url']
+    sync = item[6]['sync']
+    pull_task = item[6]['pull_task']
+
+    if not e.success:
+        resp, queue_resp = handle_failed_execution(e, item, pull_task, task_id)
+    else:
+        resp, queue_resp = handle_successful_execution(e, item, pull_task)
+
+    if pull_task:
+        post_request(update_status_url, queue_resp)
+    if sync:
+        call_back.put(resp)
+    if not sync and callback_url:
+        resp = post_request(callback_url, resp)
+
+
+def process_queue_item(queue_item, q, e, server, update_status_url):
+    execution_start_time = time.perf_counter()
+    if q.get_current_queue_length() > 0:
+        logging.info(f"Queue pending length is {q.get_current_queue_length()}")
+
+    item, item_id = queue_item
+    set_request_context(item[3]['client_id'])
+    task_id = item[3]['client_id']
+    prompt_id = item[1]
+    server.last_prompt_id = prompt_id
+    logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
+    
+
+    e.execute(item[2], prompt_id, item[3], item[4])
+    need_gc = True
+    q.task_done(item_id,
+                e.outputs_ui,
+                status=execution.PromptQueue.ExecutionStatus(
+                    status_str='success' if e.success else 'error',
+                    completed=e.success,
+                    messages=e.status_messages))
+
+    handle_execution_result(e, item, server, update_status_url, task_id)
+
+    current_time = time.perf_counter()
+    execution_time = current_time - execution_start_time
+    logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
+    return need_gc
 
 def prompt_worker(q, server):
     e = execution.PromptExecutor(server)
@@ -105,8 +187,6 @@ def prompt_worker(q, server):
     need_gc = False
     gc_collect_interval = 10.0
     update_status_url = args.update_task_status_url if args.update_task_status_url else None
-    task_id = None
-    output_data = None
 
     while True:
         try:
@@ -116,69 +196,7 @@ def prompt_worker(q, server):
 
             queue_item = q.get(timeout=timeout)
             if queue_item is not None:
-                if q.get_current_queue_length() > 0:
-                        logging.info(f"Queue pending length is {q.get_current_queue_length()}")
-
-                item, item_id = queue_item
-                if item[5]:
-                    set_sync(True) 
-                else: 
-                    set_sync(False)
-                set_request_context(item[3]['client_id'])
-                task_id = item[3]['client_id']
-                logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
-                execution_start_time = time.perf_counter()
-                prompt_id = item[1]
-                server.last_prompt_id = prompt_id
-
-                e.execute(item[2], prompt_id, item[3], item[4])
-                need_gc = True
-                q.task_done(item_id,
-                            e.outputs_ui,
-                            status=execution.PromptQueue.ExecutionStatus(
-                                status_str='success' if e.success else 'error',
-                                completed=e.success,
-                                messages=e.status_messages))
-
-                if server.client_id is not None:
-                    server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
-                call_back = item[5]
-                callback_url = item[6]['callback_url']
-                if not e.success:
-                    err = e.status_messages[2][1]
-                    response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
-                                    timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
-
-                    if get_pull_task():
-                        resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "failed", "output_data": ""}).json()
-                        if callback_url:
-                            requests.post(url=callback_url, json=response)
-                    elif not get_sync() and callback_url:
-                        requests.post(url=callback_url, json=response)
-                    else:
-                        call_back.put(response)
-                    current_time = time.perf_counter()
-                    set_pull_task(False)
-                    continue
-                for key, value in e.outputs_ui.items():
-                    if "openapi_data" in value:
-                        output_data = value["openapi_data"][0]
-                        if get_sync():
-                            call_back.put(output_data)
-                            break
-
-                if not get_sync() and callback_url and output_data is not None:
-                    requests.post(url=callback_url, json=output_data)
-
-                if get_pull_task() and output_data is not None:
-                    update_status_data = json.dumps(output_data['image_url'])
-                    requests.post(url=update_status_url, json={"task_id": task_id, "status": "completed", "output_data": update_status_data})
-
-                current_time = time.perf_counter()
-                execution_time = current_time - execution_start_time
-                set_pull_task(False)
-                logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
-
+                need_gc = process_queue_item(queue_item, q, e, server, update_status_url)
                 if args.get_task:
                     get_task(q, server)
             elif args.get_task:
@@ -208,7 +226,6 @@ def prompt_worker(q, server):
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
             current_time = time.perf_counter()
-            set_pull_task(False)
             continue
 
 def get_task(q, server):
@@ -243,7 +260,8 @@ def get_task(q, server):
             return
 
     response = response['data'][0]
-    task_id = response['task_id']
+    queue_task_id = response['task_id']
+    set_global_queue_task_id(queue_task_id)
     status = response['status']
     input_data = response['input_data']
     input_file_id = response['input_file_id']
@@ -251,7 +269,8 @@ def get_task(q, server):
 
     if input_file_id is not None and input_file_id != "":
         # todo file
-        resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "in_progress", "output_data": ""})
+        req = queue_update_request(queue_task_id, TASK_IN_PROGRESS, "")
+        resp = post_request(update_status_url, req)
         if resp.status_code != 200:
             logging.error(f"Failed to update status to in_progress: {resp.status_code}")
         return
@@ -261,7 +280,7 @@ def get_task(q, server):
 
     json_data = input_data
     if "client_id" in json_data:
-        json_data['client_id'] = task_id
+        task_id = json_data['client_id']
         set_request_context(json_data['client_id'])
         logging.info(f"got prompt, task id: {json_data['client_id']}")
 
@@ -290,17 +309,15 @@ def get_task(q, server):
                 prompt_id = task_id
                 outputs_to_execute = valid[2]
 
-    openapi_item = {
-        "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
-        "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
-        "created": time.time()
-    }
+    if "sync" in json_data:
+        json_data["sync"] = False
+    openapi_item = build_openapi_item(json_data, True)
 
-    resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "in_progress", "output_data": ""})
+    req = queue_update_request(queue_task_id, TASK_IN_PROGRESS, "")
+    resp = post_request(update_status_url, req)
     if resp.status_code != 200:
         logging.error(f"Failed to update status to in_progress: {resp.status_code}")
 
-    set_pull_task(True)
     q.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None, openapi_item))
 
 async def run(server, address='', port=8188, verbose=True, call_on_start=None):
