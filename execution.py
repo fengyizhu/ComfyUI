@@ -11,6 +11,8 @@ from exception import COMPLETED_CODE, SERVING_ERROR_CODE, OpenapiProcessingExcep
 
 import json
 import requests
+from main import post_request
+from openapi_utils import get_global_queue_task_id, queue_get_detail_request
 import torch
 import nodes
 from comfy.cli_args import args
@@ -145,7 +147,7 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
     start = time.time()
     try:
         if args.get_task and args.get_detail_url:
-            resp = requests.post(args.get_task_detail_url, json={"task_id": prompt_id}).json()
+            resp = post_request(args.get_task_detail_url, queue_get_detail_request(get_global_queue_task_id())).json()
             if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
                 raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")
 
