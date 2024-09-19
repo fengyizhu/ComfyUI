@@ -144,7 +144,7 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
     input_data_all = None
     start = time.time()
     try:
-        if args.get_task:
+        if args.get_task and args.get_detail_url:
             resp = requests.post(args.get_task_detail_url, json={"task_id": prompt_id}).json()
             if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
                 raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")

@@ -10,6 +10,7 @@ import uuid
 import requests
 
 from logger import set_request_context
+from openapi_utils import set_sync, get_sync, get_pull_task, set_pull_task
 
 def execute_prestartup_script():
     def execute_script(script_path):
@@ -119,6 +120,10 @@ def prompt_worker(q, server):
                         logging.info(f"Queue pending length is {q.get_current_queue_length()}")
 
                 item, item_id = queue_item
+                if item[5]:
+                    set_sync(True) 
+                else: 
+                    set_sync(False)
                 set_request_context(item[3]['client_id'])
                 task_id = item[3]['client_id']
                 logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
@@ -138,32 +143,40 @@ def prompt_worker(q, server):
                 if server.client_id is not None:
                     server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
                 call_back = item[5]
+                callback_url = item[6]['callback_url']
                 if not e.success:
                     err = e.status_messages[2][1]
                     response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
                                     timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
 
-                    if item[6]['callback_url'] != "":
-                        requests.post(url=item[6]['callback_url'], json=response)
-
-                    if args.get_task:
+                    if get_pull_task():
                         resp = requests.post(url=update_status_url, json={"task_id": task_id, "status": "failed", "output_data": ""}).json()
-                        continue
+                        if callback_url:
+                            requests.post(url=callback_url, json=response)
+                    elif not get_sync() and callback_url:
+                        requests.post(url=callback_url, json=response)
                     else:
                         call_back.put(response)
+                    current_time = time.perf_counter()
+                    set_pull_task(False)
+                    continue
                 for key, value in e.outputs_ui.items():
                     if "openapi_data" in value:
                         output_data = value["openapi_data"][0]
-                        if call_back is not None:
+                        if get_sync():
                             call_back.put(output_data)
                             break
 
-                if call_back is None and output_data is not None:
-                    output_data = json.dumps(output_data)
-                    requests.post(url=update_status_url, json={"task_id": task_id, "status": "completed", "output_data": output_data})
+                if not get_sync() and callback_url and output_data is not None:
+                    requests.post(url=callback_url, json=output_data)
+
+                if get_pull_task() and output_data is not None:
+                    update_status_data = json.dumps(output_data['image_url'])
+                    requests.post(url=update_status_url, json={"task_id": task_id, "status": "completed", "output_data": update_status_data})
 
                 current_time = time.perf_counter()
                 execution_time = current_time - execution_start_time
+                set_pull_task(False)
                 logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
 
                 if args.get_task:
@@ -195,6 +208,7 @@ def prompt_worker(q, server):
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
             current_time = time.perf_counter()
+            set_pull_task(False)
             continue
 
 def get_task(q, server):
@@ -286,6 +300,7 @@ def get_task(q, server):
     if resp.status_code != 200:
         logging.error(f"Failed to update status to in_progress: {resp.status_code}")
 
+    set_pull_task(True)
     q.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None, openapi_item))
 
 async def run(server, address='', port=8188, verbose=True, call_on_start=None):
