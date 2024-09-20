@@ -201,7 +201,10 @@ def recursive_execute(server, prompt, outputs, current_item, extra_data, execute
             output_data_formatted[node_id] = [[format_value(x) for x in l] for l in node_outputs]
 
         logging.error(f"!!! Exception during processing!!! {ex}")
-        logging.error(traceback.format_exc())
+        tb_str = traceback.format_exc()
+        tb_lines = tb_str.splitlines()
+        for line in tb_lines:
+            logging.error(line)
 
         error_details = {
             "code": SERVING_ERROR_CODE,
