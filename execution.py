@@ -12,6 +12,8 @@ from exception import COMPLETED_CODE, SERVING_ERROR_CODE, OpenapiProcessingExcep
 
 import json
 import requests
+from main import post_request
+from openapi_utils import get_global_queue_task_id, queue_get_detail_request
 import torch
 import nodes
 from comfy.cli_args import args
@@ -256,8 +258,8 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
     input_data_all = None
     start = time.time()
     try:
-        if args.get_task:
-            resp = requests.post(args.get_task_detail_url, json={"task_id": prompt_id}).json()
+        if args.get_task and args.get_detail_url:
+            resp = post_request(args.get_task_detail_url, queue_get_detail_request(get_global_queue_task_id())).json()
             if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
                 raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")
 
@@ -408,8 +410,11 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
             for name, inputs in input_data_all.items():
                 input_data_formatted[name] = [format_value(x) for x in inputs]
 
-        logging.error(f"!!! Exception during processing !!! {ex}")
-        logging.error(traceback.format_exc())
+        logging.error(f"!!! Exception during processing!!! {ex}")
+        tb_str = traceback.format_exc()
+        tb_lines = tb_str.splitlines()
+        for line in tb_lines:
+            logging.error(line)
 
         error_details = {
             "code": SERVING_ERROR_CODE,
