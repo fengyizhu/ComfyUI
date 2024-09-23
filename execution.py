@@ -390,7 +390,7 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
             "code": iex.code
         }
 
-        return (False, error_details, iex)
+        return (ExecutionResult.FAILURE, error_details, iex)
     except comfy.model_management.InterruptProcessingException as iex:
         logging.info("Processing interrupted")
 
