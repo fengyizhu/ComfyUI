@@ -258,7 +258,7 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
     input_data_all = None
     start = time.time()
     try:
-        if args.get_task and args.get_detail_url:
+        if args.get_task and args.get_task_detail_url:
             resp = post_request(args.get_task_detail_url, queue_get_detail_request(get_global_queue_task_id())).json()
             if resp.get('code') == 200 and resp['data']['status'] == "cancelled":
                 raise OpenapiProcessingException(code=COMPLETED_CODE, message="Task cancelled")
