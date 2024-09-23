@@ -110,17 +110,18 @@ def post_request(url, body):
 def handle_failed_execution(e, item, pull_task, task_id):
     err = e.status_messages[2][1]
     response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
-                        timestamp=int(time.time()), task_id=task_id, origin_callback_url=item[6]['origin_callback_url'])
+                        timestamp=int(time.time()), task_id=task_id, openapi_item=item[6])
     queue_response = None
     if pull_task:
         queue_response = queue_update_request(get_global_queue_task_id(), TASK_FAILED, response)
     return response, queue_response
 
-def handle_successful_execution(e, item, pull_task):
-    for key, value in e.outputs_ui['outputs'].items():
+def handle_successful_execution(e, item, pull_task, task_id):
+    for key, value in e.outputs_ui.items():
         if "openapi_data" in value:
             output_data = value["openapi_data"][0]
-            output_data["model"] = item[6]["model"]
+            output_data["task_id"] = task_id
+            output_data["openapi_item"] = item[6]
             response = output_data
     queue_response = None
     if pull_task:
@@ -142,7 +143,7 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
     if not e.success:
         resp, queue_resp = handle_failed_execution(e, item, pull_task, task_id)
     else:
-        resp, queue_resp = handle_successful_execution(e, item, pull_task)
+        resp, queue_resp = handle_successful_execution(e, item, pull_task, task_id)
 
     if pull_task:
         post_request(update_status_url, queue_resp)
