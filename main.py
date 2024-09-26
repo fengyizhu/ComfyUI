@@ -1,3 +1,5 @@
+import signal
+import sys
 import comfy.options
 comfy.options.enable_args_parsing()
 
@@ -158,8 +160,8 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
     else:
         resp, queue_resp = handle_successful_execution(e, item, pull_task, task_id)
 
-    if pull_task:
-        post_request(update_status_url, queue_resp)
+    # if pull_task:
+    #     post_request(update_status_url, queue_resp)
     if sync:
         call_back.put(resp)
     if not sync and callback_url:
@@ -230,6 +232,7 @@ def prompt_worker(q, server):
                 last_gc_collect = 0
 
             if need_gc:
+                start = time.time()
                 current_time = time.perf_counter()
                 if (current_time - last_gc_collect) > gc_collect_interval:
                     comfy.model_management.cleanup_models()
@@ -237,6 +240,7 @@ def prompt_worker(q, server):
                     comfy.model_management.soft_empty_cache()
                     last_gc_collect = current_time
                     need_gc = False
+                logging.info("GC took {:.2f} seconds".format(time.time() - start))
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
             current_time = time.perf_counter()
@@ -325,7 +329,7 @@ def get_task(q, server):
 
     if "sync" in json_data:
         json_data["sync"] = False
-    openapi_item = build_openapi_item(json_data, True)
+    openapi_item = build_openapi_item(json_data, True, True)
 
     req = queue_update_request(queue_task_id, TASK_IN_PROGRESS, "")
     resp = post_request(update_status_url, req)
@@ -375,8 +379,12 @@ def load_extra_path_config(yaml_path):
                 logging.info("Adding extra search path {} {}".format(x, full_path))
                 folder_paths.add_model_folder_path(x, full_path)
 
+def signal_handler(sig, frame):
+    logging.info("Received signal: {}".format(sig))
+    sys.exit(0)
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal_handler)
     if args.temp_directory:
         temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
         logging.info(f"Setting temp directory to: {temp_dir}")
@@ -412,11 +420,11 @@ if __name__ == "__main__":
 
     def monitor_thread(q, server):
         while True:
-            worker_thread = threading.Thread(target=prompt_worker, args=(q, server,))
+            worker_thread = threading.Thread(target=prompt_worker, args=(q, server,), daemon=True)
             worker_thread.start()
             worker_thread.join()
 
-    threading.Thread(target=monitor_thread, args=(q, server,)).start()
+    threading.Thread(target=monitor_thread, args=(q, server,), daemon=True).start()
 
     if args.output_directory:
         output_dir = os.path.abspath(args.output_directory)

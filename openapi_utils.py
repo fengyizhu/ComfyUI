@@ -10,6 +10,15 @@ def set_global_queue_task_id(task_id):
 def get_global_queue_task_id():
     return queue_task_id
 
+api_call = False
+
+def set_global_api_call(api_call_):
+    global api_call
+    api_call = api_call_
+
+def get_global_api_call():
+    return api_call
+
 def build_openapi_item(json_data, pull_task):
     openapi_item = {
         "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
@@ -17,7 +26,9 @@ def build_openapi_item(json_data, pull_task):
         "created": time.time(),
         "model": json_data["openapi_extra_data"]["model"] if "openapi_extra_data" in json_data and "model" in json_data["openapi_extra_data"] else None,
         "sync": json_data["sync"] if "sync" in json_data else None,
-        "pull_task": pull_task
+        "pull_task": pull_task,
+        "api_call": set_global_api_call(api_call),
+        "queue_task_id": get_global_queue_task_id()
     }
     return openapi_item
 
