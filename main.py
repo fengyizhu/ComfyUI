@@ -10,6 +10,11 @@ import uuid
 import requests
 
 from logger import set_request_context
+from comfy.cli_args import args
+from app.logger import setup_logger
+
+# setup_logger(verbose=args.verbose)
+
 from openapi_utils import get_global_queue_task_id, queue_update_request, build_openapi_item, set_global_queue_task_id
 
 def execute_prestartup_script():
@@ -23,6 +28,9 @@ def execute_prestartup_script():
         except Exception as e:
             print(f"Failed to execute startup-script: {script_path} / {e}")
         return False
+
+    if args.disable_all_custom_nodes:
+        return
 
     node_paths = folder_paths.get_folder_paths("custom_nodes")
     for custom_node_path in node_paths:
@@ -59,7 +67,6 @@ import shutil
 import threading
 import gc
 
-from comfy.cli_args import args
 import logging
 
 if os.name == "nt":
@@ -76,13 +83,19 @@ if __name__ == "__main__":
 
     import cuda_malloc
 
+if args.windows_standalone_build:
+    try:
+        import fix_torch
+    except:
+        pass
+
 import comfy.utils
 import yaml
 
 import execution
 import server
 from server import BinaryEventTypes
-from nodes import init_custom_nodes
+import nodes
 import comfy.model_management
 
 def cuda_malloc_warning():
@@ -117,7 +130,7 @@ def handle_failed_execution(e, item, pull_task, task_id):
     return response, queue_response
 
 def handle_successful_execution(e, item, pull_task, task_id):
-    for key, value in e.outputs_ui.items():
+    for key, value in e.history_result['outputs'].items():
         if "openapi_data" in value:
             output_data = value["openapi_data"][0]
             output_data["task_id"] = task_id
@@ -169,7 +182,7 @@ def process_queue_item(queue_item, q, e, server, update_status_url):
     e.execute(item[2], prompt_id, item[3], item[4])
     need_gc = True
     q.task_done(item_id,
-                e.outputs_ui,
+                e.history_result,
                 status=execution.PromptQueue.ExecutionStatus(
                     status_str='success' if e.success else 'error',
                     completed=e.success,
@@ -183,7 +196,7 @@ def process_queue_item(queue_item, q, e, server, update_status_url):
     return need_gc
 
 def prompt_worker(q, server):
-    e = execution.PromptExecutor(server)
+    e = execution.PromptExecutor(server, lru_size=args.cache_lru)
     last_gc_collect = 0
     need_gc = False
     gc_collect_interval = 10.0
@@ -390,7 +403,7 @@ if __name__ == "__main__":
         for config_path in itertools.chain(*args.extra_model_paths_config):
             load_extra_path_config(config_path)
 
-    init_custom_nodes()
+    nodes.init_extra_nodes(init_custom_nodes=not args.disable_all_custom_nodes)
 
     cuda_malloc_warning()
 
@@ -414,6 +427,8 @@ if __name__ == "__main__":
     folder_paths.add_model_folder_path("checkpoints", os.path.join(folder_paths.get_output_directory(), "checkpoints"))
     folder_paths.add_model_folder_path("clip", os.path.join(folder_paths.get_output_directory(), "clip"))
     folder_paths.add_model_folder_path("vae", os.path.join(folder_paths.get_output_directory(), "vae"))
+    folder_paths.add_model_folder_path("diffusion_models", os.path.join(folder_paths.get_output_directory(), "diffusion_models"))
+    folder_paths.add_model_folder_path("loras", os.path.join(folder_paths.get_output_directory(), "loras"))
 
     if args.input_directory:
         input_dir = os.path.abspath(args.input_directory)
@@ -433,6 +448,7 @@ if __name__ == "__main__":
         call_on_start = startup_server
 
     try:
+        loop.run_until_complete(server.setup())
         loop.run_until_complete(run(server, address=args.listen, port=args.port, verbose=not args.dont_print_server, call_on_start=call_on_start))
     except KeyboardInterrupt:
         logging.info("\nStopped server")
