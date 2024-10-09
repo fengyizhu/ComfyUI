@@ -19,7 +19,7 @@ def set_global_api_call(api_call_):
 def get_global_api_call():
     return api_call
 
-def build_openapi_item(json_data, pull_task):
+def build_openapi_item(json_data, pull_task, api_call=False):
     openapi_item = {
         "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
         "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
