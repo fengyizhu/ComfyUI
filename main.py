@@ -165,7 +165,8 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
     if sync:
         call_back.put(resp)
     if not sync and callback_url:
-        resp = post_request(callback_url, resp)
+        response = post_request(callback_url, resp)
+        logging.info(f"Send callback url: {callback_url} , Response status: {response.status_code}")
 
 
 def process_queue_item(queue_item, q, e, server, update_status_url):
