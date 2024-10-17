@@ -576,7 +576,7 @@ def load_state_dict_guess_config(ckpt_path, sd, output_vae=True, output_clip=Tru
             model.load_model_weights(sd, diffusion_model_prefix)
         if inital_load_device != torch.device("cpu"):
             logging.info("loaded straight to GPU")
-            model_management.load_models_gpu([model_patcher], force_full_load=True)
+            model_management.load_models_gpu([model_patcher], force_full_load=True, ckpt_path=ckpt_path)
 
     if output_vae:
         vae = model_cache.get_cpu_model(ckpt_path, 'vae')
