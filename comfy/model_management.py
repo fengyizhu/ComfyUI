@@ -287,12 +287,13 @@ def module_size(module):
     return module_mem
 
 class LoadedModel:
-    def __init__(self, model):
+    def __init__(self, model, ckpt_path=None):
         self.model = model
         self.device = model.load_device
         self.weights_loaded = False
         self.real_model = None
         self.currently_used = True
+        self.ckpt_path = ckpt_path
 
     def model_memory(self):
         return self.model.model_size()
@@ -355,6 +356,8 @@ class LoadedModel:
         return self.model.partially_load(self.device, extra_memory)
 
     def __eq__(self, other):
+        if self.ckpt_path is not None and other.ckpt_path is not None:
+            return self.ckpt_path == other.ckpt_path
         return self.model is other.model
 
 def use_more_memory(extra_memory, loaded_models, device):
@@ -454,7 +457,7 @@ def free_memory(memory_required, device, keep_loaded=[]):
                 soft_empty_cache()
     return unloaded_models
 
-def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimum_memory_required=None, force_full_load=False):
+def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimum_memory_required=None, force_full_load=False, ckpt_path=None):
     global vram_state
 
     inference_memory = minimum_inference_memory()
@@ -469,13 +472,17 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
     models_to_load = []
     models_already_loaded = []
     for x in models:
-        loaded_model = LoadedModel(x)
+        loaded_model = LoadedModel(x, ckpt_path)
         loaded = None
+        loaded_model_index = None
 
-        try:
-            loaded_model_index = current_loaded_models.index(loaded_model)
-        except:
-            loaded_model_index = None
+        if ckpt_path is not None:
+            loaded_model_index = model_cache.get_gpu_cache_model(loaded_model)
+        if loaded_model_index is None:
+            try:
+                loaded_model_index = current_loaded_models.index(loaded_model)
+            except:
+                loaded_model_index = None
 
         if loaded_model_index is not None:
             loaded = current_loaded_models[loaded_model_index]
@@ -544,7 +551,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
             lowvram_model_memory = 64 * 1024 * 1024
 
         cur_loaded_model = loaded_model.model_load(lowvram_model_memory, force_patch_weights=force_patch_weights)
-        model_cache.put_gpu_cache(loaded_model, 0)
+        model_cache.put_gpu_cache(ckpt_path, loaded_model, 0)
 
     devs = set(map(lambda a: a.device, models_already_loaded))
     for d in devs:

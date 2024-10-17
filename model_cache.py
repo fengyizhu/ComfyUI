@@ -55,7 +55,9 @@ class ModelCache:
             self.unload_last_gpu_model()
 
 
-    def put_gpu_cache(self, model, pos=0):
+    def put_gpu_cache(self, path, model, pos=0):
+        if path is None:
+            return
         while self.current_gpu_device_size() > self.gpu_device_size:
             if self.gpu_cache == []:
                 logging.warning(f"Current used gpu device size {self.current_gpu_device_size()} over gpu device size {self.gpu_device_size}, and gpu cache is none, cannot cache model")
@@ -65,21 +67,26 @@ class ModelCache:
             logging.debug(f"Current used gpu device size {self.current_gpu_device_size()} over gpu device size {self.gpu_device_size}, unload last model from cache")
 
         self.gpu_cache.insert(pos, model)
-        self.gpu_cache_time[model.model] = time.time()
+        self.gpu_cache_time[path] = time.time()
 
 
     def get_gpu_cache_model(self, model):
-        cache_model = None
+        cache_model_index = None
 
         try:
-            cache_model = self.gpu_cache[model]
-            logging.info(f"Retrieved model from gpu cache {model}")
+            if self.gpu_cache_time[model.ckpt_path]:
+                for m in self.gpu_cache:
+                    if m.ckpt_path == model.ckpt_path:
+                        cache_model_index = self.gpu_cache.index(m)
+                        logging.info(f"Retrieved model from gpu cache {m.ckpt_path}")
         except:
             logging.info(f"Model not in cache {model}")
-            cache_model = None
+            cache_model_index = None
 
-        self.gpu_cache_time[model.model] = time.time()
-        return cache_model
+        if cache_model_index is not None:
+            self.gpu_cache_time[model.ckpt_path] = time.time()
+        
+        return cache_model_index
 
 
     def unload_last_gpu_model(self):
