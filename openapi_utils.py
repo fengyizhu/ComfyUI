@@ -19,7 +19,25 @@ def set_global_api_call(api_call_):
 def get_global_api_call():
     return api_call
 
-def build_openapi_item(json_data, pull_task, api_call=False):
+vae = None
+
+def set_global_vae(vae_):
+    global vae
+    vae = vae_
+
+def get_global_vae():
+    return vae
+
+global_func = None
+
+def store_function(func):
+    global global_func
+    global_func = func
+
+def get_function():
+    return global_func
+
+def build_openapi_item(json_data, pull_task, api_call=False, response_mode="blocking"):
     openapi_item = {
         "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
         "origin_callback_url": json_data["origin_callback_url"] if "origin_callback_url" in json_data else None,
@@ -28,7 +46,8 @@ def build_openapi_item(json_data, pull_task, api_call=False):
         "sync": json_data["sync"] if "sync" in json_data else None,
         "pull_task": pull_task,
         "api_call": set_global_api_call(api_call),
-        "queue_task_id": get_global_queue_task_id()
+        "queue_task_id": get_global_queue_task_id(),
+        "response_mode": response_mode,
     }
     return openapi_item
 

@@ -96,7 +96,7 @@ import yaml
 
 import execution
 import server
-from server import BinaryEventTypes
+from server import BinaryEventTypes, ResponseMode
 import nodes
 import comfy.model_management
 
@@ -159,6 +159,7 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
     callback_url = item[6]['callback_url']
     sync = item[6]['sync']
     pull_task = item[6]['pull_task']
+    response_mode = item[6]['response_mode']
 
     if not e.success:
         resp, queue_resp = handle_failed_execution(e, item, pull_task, task_id)
@@ -169,6 +170,15 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
     #     post_request(update_status_url, queue_resp)
     if sync:
         call_back.put(resp)
+        if response_mode == ResponseMode.STREAMING:
+            msg = {
+                "event": {
+                    "type": "succeeded",
+                },
+                "data": {}
+            }
+            server.loop.call_soon_threadsafe(
+                server.openapi_queue_dict[task_id].put_nowait, msg)
     if not sync and callback_url:
         response = post_request(callback_url, resp)
         logging.info(f"Send callback url: {callback_url} , Response status: {response.status_code}")
