@@ -16,6 +16,8 @@ from PIL.PngImagePlugin import PngInfo
 import numpy as np
 import safetensors.torch
 
+from openapi_utils import set_global_vae
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "comfy"))
 
 import comfy.diffusers_load
@@ -539,6 +541,7 @@ class CheckpointLoaderSimple:
     def load_checkpoint(self, ckpt_name):
         ckpt_path = folder_paths.get_full_path("checkpoints", ckpt_name)
         out = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        set_global_vae(out[2])
         return out[:3]
 
 class DiffusersLoader:

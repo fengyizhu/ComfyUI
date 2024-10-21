@@ -8,6 +8,7 @@ import comfy.model_management
 import folder_paths
 import comfy.utils
 import logging
+from openapi_utils import get_function, get_global_vae
 
 MAX_PREVIEW_RESOLUTION = args.preview_size
 
@@ -23,8 +24,13 @@ class LatentPreviewer:
         pass
 
     def decode_latent_to_preview_image(self, preview_format, x0):
+        tmp = x0.clone()
+        vae = get_global_vae()
+        post_process = get_function()
+        tmp_vae_decode = vae.decode(post_process(tmp.to(torch.float32)))
+
         preview_image = self.decode_latent_to_preview(x0)
-        return ("JPEG", preview_image, MAX_PREVIEW_RESOLUTION)
+        return ("JPEG", preview_image, MAX_PREVIEW_RESOLUTION, tmp_vae_decode)
 
 class TAESDPreviewerImpl(LatentPreviewer):
     def __init__(self, taesd):
