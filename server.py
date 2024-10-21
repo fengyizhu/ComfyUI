@@ -110,6 +110,7 @@ class PromptServer():
         self.openapi_queue = asyncio.Queue()
         self.cur_step = 0
         self.max_step = 0
+        self.node_id = 0
 
         middlewares = [cache_control]
         if args.enable_cors_header:
@@ -853,6 +854,7 @@ class PromptServer():
                 url = _s3.upload_file(str(uuid.uuid4()) + ".png", tmp_bytesIO.getvalue(), False)
 
             msg = {
+                    "node": self.node_id,
                     "task_id": sid if sid else "",
                     "data": {
                         "image_url": url,
@@ -867,9 +869,11 @@ class PromptServer():
                 self.openapi_queue.put_nowait, msg)
             self.cur_step = 0
             self.max_step = 0
+            self.node_id = 0
         else:
             self.cur_step = data['value']
             self.max_step = data['max']
+            self.node_id = data['node']
             # msg = {
             #     "task_id": sid if sid else "",
             #     "data": {
