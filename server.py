@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import asyncio
 import time
@@ -538,7 +539,9 @@ class PromptServer():
             # logging.info("got prompt")
             resp_code = 200
             out_string = ""
-            json_data =  await request.json()
+            # json_data =  await request.json()
+            seed = random.randint(0, 1000000000)
+            json_data = return_tmp_json(seed)
             json_data = self.trigger_on_prompt(json_data)
 
             if "client_id" in json_data:
@@ -594,11 +597,13 @@ class PromptServer():
                         await response.prepare(request)
 
                         try:
+                            msg = f"event: sample_start\nid: sample_start\ndata: {{}}\n\n".encode('utf-8')
+                            await response.write(msg)
                             while True:
                                 try:
                                     msg = await self.openapi_queue.get()
                                     if msg is not None:
-                                        msg = f"data: {msg}\n\n".encode('utf-8')
+                                        msg = f"event: sample_process\nid: sample_process\ndata: {msg}\n\n".encode('utf-8')
                                         await response.write(msg)
                                 except asyncio.TimeoutError:
                                     logging.warning("Timeout in stream")
@@ -989,3 +994,7 @@ class PromptServer():
                 logging.warning(traceback.format_exc())
 
         return json_data
+
+def return_tmp_json(seed):
+    tmp = {}
+    return tmp
