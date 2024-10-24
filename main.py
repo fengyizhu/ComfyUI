@@ -1,5 +1,6 @@
 import signal
 import sys
+import tracemalloc
 import comfy.options
 comfy.options.enable_args_parsing()
 
@@ -213,7 +214,17 @@ def prompt_worker(q, server):
 
             queue_item = q.get(timeout=timeout)
             if queue_item is not None:
+                tracemalloc.start()
+                
                 need_gc = process_queue_item(queue_item, q, e, server, update_status_url)
+
+                snapshot = tracemalloc.take_snapshot()
+                top_stats = snapshot.statistics('lineno')
+                logging.info("[ Top 10 memory usage ]")
+                for stat in top_stats[:10]:
+                    logging.info(stat)
+                tracemalloc.stop()
+
                 if args.get_task:
                     get_task(q, server)
             elif args.get_task:
