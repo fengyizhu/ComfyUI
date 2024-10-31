@@ -147,6 +147,8 @@ parser.add_argument("--get-task", action="store_true", help="Pull task from the 
 parser.add_argument("--get-task-url", type=str, default=None, help="Pull task server's URL.")
 parser.add_argument("--get-task-detail-url", type=str, default=None, help="Pull task detail server's URL.")
 parser.add_argument("--update-task-status-url", type=str, default=None, help="Update task server's URL.")
+
+parser.add_argument("--free-memory", action="store_true", help="Keep free memory turned on.")
 # The default built-in provider hosted under web/
 DEFAULT_VERSION_STRING = "comfyanonymous/ComfyUI@latest"
 
