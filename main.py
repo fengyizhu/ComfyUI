@@ -204,6 +204,7 @@ def prompt_worker(q, server):
     need_gc = False
     gc_collect_interval = 10.0
     update_status_url = args.update_task_status_url if args.update_task_status_url else None
+    time.sleep(15)
 
     while True:
         try:
