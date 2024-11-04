@@ -245,6 +245,8 @@ def prompt_worker(q, server):
                 logging.info("GC took {:.2f} seconds".format(time.time() - start))
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
+            e.reset()
+            gc.collect()
             current_time = time.perf_counter()
             continue
 
