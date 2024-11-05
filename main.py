@@ -215,10 +215,6 @@ def prompt_worker(q, server):
             queue_item = q.get(timeout=timeout)
             if queue_item is not None:
                 need_gc = process_queue_item(queue_item, q, e, server, update_status_url)
-                if args.get_task:
-                    get_task(q, server)
-            elif args.get_task:
-                get_task(q, server)
             
             flags = q.get_flags()
             free_memory = flags.get("free_memory", False)
@@ -243,6 +239,9 @@ def prompt_worker(q, server):
                     last_gc_collect = current_time
                     need_gc = False
                 logging.info("GC took {:.2f} seconds".format(time.time() - start))
+
+            if args.get_task:
+                    get_task(q, server)
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
             e.reset()
