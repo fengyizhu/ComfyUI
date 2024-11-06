@@ -198,6 +198,12 @@ def process_queue_item(queue_item, q, e, server, update_status_url):
     logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
     return need_gc
 
+import ctypes
+
+def trim_memory():
+  libc = ctypes.CDLL("libc.so.6")
+  return libc.malloc_trim(0)
+
 def prompt_worker(q, server):
     e = execution.PromptExecutor(server, lru_size=args.cache_lru)
     last_gc_collect = 0
@@ -235,6 +241,7 @@ def prompt_worker(q, server):
                 if (current_time - last_gc_collect) > gc_collect_interval:
                     comfy.model_management.cleanup_models()
                     gc.collect()
+                    trim_memory()
                     comfy.model_management.soft_empty_cache()
                     last_gc_collect = current_time
                     need_gc = False
