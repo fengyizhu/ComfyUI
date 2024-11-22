@@ -113,6 +113,7 @@ def cuda_malloc_warning():
 
 model_list_str = os.getenv('MODEL_LIST', '')
 model_list = model_list_str.split(',')
+endpoint = os.getenv('ENDPOINT', "/v1/images/ke/generations")
 TASK_FAILED = "failed"
 TASK_COMPLETED = "completed"
 TASK_IN_PROGRESS = "in_progress"
@@ -140,8 +141,11 @@ def handle_successful_execution(e, item, pull_task, task_id):
             response = output_data
     queue_response = None
     if pull_task:
-        update_status_data = json.dumps(output_data['pull_task_data'])
-        queue_response = queue_update_request(get_global_queue_task_id(), TASK_COMPLETED, update_status_data)
+        if output_data.get('pull_task_data'):
+            update_status_data = json.dumps(output_data['pull_task_data'])
+            queue_response = queue_update_request(get_global_queue_task_id(), TASK_COMPLETED, update_status_data)
+        else:
+            queue_response = None
 
     return response, queue_response
 
@@ -258,7 +262,7 @@ def get_task(q, server):
         update_status_url = args.update_task_status_url
     # post queue
     req = {
-        "endpoint": "/v1/images/ke/generations",
+        "endpoint": endpoint,
         "models": model_list,
         "size": 1,
         "level": 0
