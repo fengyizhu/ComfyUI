@@ -141,8 +141,11 @@ def handle_successful_execution(e, item, pull_task, task_id):
             response = output_data
     queue_response = None
     if pull_task:
-        update_status_data = json.dumps(output_data['pull_task_data'])
-        queue_response = queue_update_request(get_global_queue_task_id(), TASK_COMPLETED, update_status_data)
+        if output_data.get('pull_task_data'):
+            update_status_data = json.dumps(output_data['pull_task_data'])
+            queue_response = queue_update_request(get_global_queue_task_id(), TASK_COMPLETED, update_status_data)
+        else:
+            queue_response = None
 
     return response, queue_response
 
