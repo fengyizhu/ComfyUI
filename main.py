@@ -133,6 +133,7 @@ def handle_failed_execution(e, item, pull_task, task_id):
     return response, queue_response
 
 def handle_successful_execution(e, item, pull_task, task_id):
+    response = None
     for key, value in e.history_result['outputs'].items():
         if "openapi_data" in value:
             output_data = value["openapi_data"][0]
@@ -228,10 +229,13 @@ def prompt_worker(q, server):
                 need_gc = True
                 last_gc_collect = 0
 
-            if free_memory or args.free_memory:
+            if free_memory:
                 e.reset()
                 need_gc = True
                 last_gc_collect = 0
+
+            if args.free_memory and not free_memory:
+                e.reset()
 
             if need_gc:
                 start = time.time()

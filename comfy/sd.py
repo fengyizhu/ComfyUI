@@ -1,6 +1,7 @@
 import torch
 from enum import Enum
 import logging
+import copy
 
 from comfy import model_management
 from .ldm.models.autoencoder import AutoencoderKL, AutoencodingEngine
@@ -33,6 +34,7 @@ import comfy.supported_models_base
 import comfy.taesd.taesd
 
 from model_cache import ModelCache, model_cache
+from comfy.cli_args import args
 
 def load_lora_for_models(model, clip, lora, strength_model, strength_clip):
     key_map = {}
@@ -43,14 +45,20 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip):
 
     loaded = comfy.lora.load_lora(lora, key_map)
     if model is not None:
-        new_modelpatcher = model.clone()
+        if args.free_memory:
+            new_modelpatcher = new_modelpatcher = copy.deepcopy(model)
+        else:
+            new_modelpatcher = model.clone()
         k = new_modelpatcher.add_patches(loaded, strength_model)
     else:
         k = ()
         new_modelpatcher = None
 
     if clip is not None:
-        new_clip = clip.clone()
+        if args.free_memory:
+            new_clip = copy.deepcopy(clip)
+        else:
+            new_clip = clip.clone()
         k1 = new_clip.add_patches(loaded, strength_clip)
     else:
         k1 = ()
