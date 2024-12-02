@@ -234,8 +234,8 @@ def prompt_worker(q, server):
                 need_gc = True
                 last_gc_collect = 0
 
-            if args.free_memory and not free_memory:
-                e.reset()
+            # if args.free_memory and not free_memory:
+            #     e.reset()
 
             if need_gc:
                 start = time.time()

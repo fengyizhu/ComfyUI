@@ -46,7 +46,7 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip):
     loaded = comfy.lora.load_lora(lora, key_map)
     if model is not None:
         if args.free_memory:
-            new_modelpatcher = new_modelpatcher = copy.deepcopy(model)
+            new_modelpatcher = copy.deepcopy(model)
         else:
             new_modelpatcher = model.clone()
         k = new_modelpatcher.add_patches(loaded, strength_model)
