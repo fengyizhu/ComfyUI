@@ -10,6 +10,8 @@ import time
 import json
 import uuid
 import requests
+import traceback
+
 
 from logger import set_request_context
 from comfy.cli_args import args
@@ -391,6 +393,8 @@ def load_extra_path_config(yaml_path):
                 folder_paths.add_model_folder_path(x, full_path)
 
 def signal_handler(sig, frame):
+    print('Received SIGTERM from:', file=sys.stderr)
+    traceback.print_stack(frame)
     logging.info("Received signal: {}".format(sig))
     sys.exit(0)
 
