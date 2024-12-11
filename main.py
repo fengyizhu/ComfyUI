@@ -391,8 +391,9 @@ def load_extra_path_config(yaml_path):
                 folder_paths.add_model_folder_path(x, full_path)
 
 def signal_handler(sig, frame):
+    from comfy.cli_args import args
     logging.info("Received signal: {}".format(sig))
-    flags = q.get_flags()
+    flags = args.get_flags()
     handle_signal = flags.get("handle_signal", False)
     logging.info("Handle signal: {}".format(handle_signal))
     if handle_signal:
