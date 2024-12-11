@@ -394,6 +394,7 @@ def signal_handler(sig, frame):
     logging.info("Received signal: {}".format(sig))
     flags = q.get_flags()
     handle_signal = flags.get("handle_signal", False)
+    logging.info("Handle signal: {}".format(handle_signal))
     if handle_signal:
         logging.info("Received signal, system exit .")
         sys.exit(0)
