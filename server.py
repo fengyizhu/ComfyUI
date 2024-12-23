@@ -115,6 +115,9 @@ class PromptServer():
         self.client_session:Optional[aiohttp.ClientSession] = None
         self.number = 0
         self.openapi_queue_dict = {}
+        self.current = 1
+        self.total_step = 1
+        self.progress = 0
 
         middlewares = [cache_control]
         if args.enable_cors_header:
@@ -811,12 +814,17 @@ class PromptServer():
                     "content": {
                         "image_url": url,
                         "image_id": 1, # 目前只有单张图片
+                        "progress": self.progress
                     }
                 }
             }
             if sid in self.openapi_queue_dict:
                 self.loop.call_soon_threadsafe(
                     self.openapi_queue_dict[sid].put_nowait, msg)
+        else:
+            self.total_step = data.get('max', 1)
+            self.current = 1 if self.total_step == 1 else data.get('value', 1)
+            self.progress = int(self.current / self.total_step * 100)
 
     def encode_bytes(self, event, data):
         if not isinstance(event, int):
