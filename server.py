@@ -1,8 +1,16 @@
 import os
+import random
 import sys
 import asyncio
 import time
 import traceback
+
+import base64
+import cv2
+from h11 import Response
+import numpy as np
+import torch
+from custom_nodes.comfyui_kecv_openapi.src.node import _s3
 
 import nodes
 import folder_paths
@@ -38,6 +46,10 @@ class BinaryEventTypes:
     PREVIEW_IMAGE = 1
     UNENCODED_PREVIEW_IMAGE = 2
 
+class ResponseMode:
+    BLOCKING = "blocking"
+    STREAMING = "streaming"
+
 async def send_socket_catch_exception(function, message):
     try:
         await function(message)
@@ -61,6 +73,10 @@ def get_comfyui_version():
 
 @web.middleware
 async def cache_control(request: web.Request, handler):
+    if request.path == "prompt":
+        body = await request.json()
+        if 'response_mode' in body and body['response_mode'] == ResponseMode.STREAMING:
+            return await handler(request)
     response: web.Response = await handler(request)
     if request.path.endswith('.js') or request.path.endswith('.css'):
         response.headers.setdefault('Cache-Control', 'no-cache')
@@ -98,6 +114,10 @@ class PromptServer():
         self.messages = asyncio.Queue()
         self.client_session:Optional[aiohttp.ClientSession] = None
         self.number = 0
+        self.openapi_queue_dict = {}
+        self.current = 1
+        self.total_step = 1
+        self.progress = 0
 
         middlewares = [cache_control]
         if args.enable_cors_header:
@@ -542,7 +562,10 @@ class PromptServer():
 
                 self.number += 1
 
-            openapi_item = build_openapi_item(json_data, False)
+            response_mode = ResponseMode.BLOCKING
+            if "response_mode" in json_data:
+                response_mode = json_data["response_mode"]
+            openapi_item = build_openapi_item(json_data, False, response_mode=response_mode)
 
             if "prompt" in json_data:
                 prompt = json_data["prompt"]
@@ -575,8 +598,52 @@ class PromptServer():
 
                         callback = notify(web)
                         self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, callback, openapi_item))
-                        
-                        return await callback.get()
+
+                        if response_mode == ResponseMode.STREAMING:
+                            self.openapi_queue_dict[json_data['client_id']] = asyncio.Queue()
+                            response = web.StreamResponse()
+                            response.content_type = 'text/event-stream'
+                            await response.prepare(request)
+
+                            async def send_event(response, event_type, data):
+                                message = f"event: {event_type}\nid: {event_type}\ndata: {data}\n\n".encode('utf-8')
+                                await response.write(message)
+
+                            try:
+                                await send_event(response, "start", "{}")
+                                last_msg = None
+                                last_image_msg = None
+                                result = {"result": [],}
+                                while True:
+                                    try:
+                                        msg = await self.openapi_queue_dict[json_data['client_id']].get()
+                                        if msg:
+                                            event_type = msg['event']['type']
+                                            if event_type == "succeeded":
+                                                last_msg = msg
+                                                continue
+
+                                            await send_event(response, event_type, msg['data'])
+                                            last_image_msg = msg
+
+                                        if last_msg and self.openapi_queue_dict[json_data['client_id']].empty():
+                                                result['result'].append(last_image_msg['data']['content'])
+                                                await send_event(response, last_msg['event']['type'], result)
+                                                break
+                                    except asyncio.TimeoutError:
+                                        logging.warning("Timeout in stream")
+                                        break
+                            except asyncio.CancelledError:
+                                logging.info("Connection closed by client")
+                            except Exception as e:
+                                logging.error(f"Error in stream: {e}")
+                            finally:
+                                await response.write_eof()
+                                self.openapi_queue_dict.pop(json_data['client_id'], None)
+                                logging.info("Connection closed")
+                            return response
+                        else:
+                            return await callback.get()
                     else:
                         logging.warning("invalid prompt: {}".format(valid[1]))
                         return web.json_response({"error": valid[1], "node_errors": valid[3]}, status=400)
@@ -702,12 +769,62 @@ class PromptServer():
         return prompt_info
 
     async def send(self, event, data, sid=None):
+        if event == BinaryEventTypes.UNENCODED_PREVIEW_IMAGE or event == 'progress':
+            await self.openapi_send(event, data, sid)
+
         if event == BinaryEventTypes.UNENCODED_PREVIEW_IMAGE:
             await self.send_image(data, sid=sid)
         elif isinstance(data, (bytes, bytearray)):
             await self.send_bytes(event, data, sid)
         else:
             await self.send_json(event, data, sid)
+
+    async def openapi_send(self, event, data, sid=None):
+        if event == BinaryEventTypes.UNENCODED_PREVIEW_IMAGE:
+            image = data[1]
+            try:
+                vae_decode = data[3]
+            except IndexError:
+                vae_decode = None
+
+            if vae_decode is not None:
+                i = 255. * vae_decode.cpu().numpy()
+                i = np.squeeze(i)
+                img = np.clip(i, 0, 255).astype(np.uint8)
+
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                _, cv_buffer = cv2.imencode('.png', img_rgb)
+                img_base64 = base64.b64encode(cv_buffer.tobytes())
+                img_base64 = str(img_base64, encoding='utf-8')
+                img_base64 = base64.b64decode(img_base64)
+                url = _s3.upload_file(str(uuid.uuid4()) + ".png", img_base64, False)
+            else:
+                tmp_image = image.copy()
+                tmp_bytesIO = BytesIO()
+                tmp_image.save(tmp_bytesIO, format="PNG", quality=50, compress_level=5) # 0-100, 0-9
+                tmp_bytesIO.seek(0)
+                url = _s3.upload_file(str(uuid.uuid4()) + ".png", tmp_bytesIO.getvalue(), False)
+
+            msg = {
+                "event": {
+                    "type": "image.delta",
+                },
+                "data": {
+                    "task_id": sid if sid else "",
+                    "content": {
+                        "image_url": url,
+                        "image_id": 1, # 目前只有单张图片
+                        "progress": self.progress
+                    }
+                }
+            }
+            if sid in self.openapi_queue_dict:
+                self.loop.call_soon_threadsafe(
+                    self.openapi_queue_dict[sid].put_nowait, msg)
+        else:
+            self.total_step = data.get('max', 1)
+            self.current = 1 if self.total_step == 1 else data.get('value', 1)
+            self.progress = int(self.current / self.total_step * 100)
 
     def encode_bytes(self, event, data):
         if not isinstance(event, int):

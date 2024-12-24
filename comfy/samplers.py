@@ -1,3 +1,7 @@
+import time
+import cv2
+from openapi_utils import get_global_vae, store_function
+import numpy as np
 from .k_diffusion import sampling as k_diffusion_sampling
 from .extra_samplers import uni_pc
 import torch
@@ -685,6 +689,7 @@ class CFGGuider:
         return sampling_function(self.inner_model, x, timestep, self.conds.get("negative", None), self.conds.get("positive", None), self.cfg, model_options=model_options, seed=seed)
 
     def inner_sample(self, noise, latent_image, device, sampler, sigmas, denoise_mask, callback, disable_pbar, seed):
+        store_function(self.inner_model.process_latent_out)
         if latent_image is not None and torch.count_nonzero(latent_image) > 0: #Don't shift the empty latent image.
             latent_image = self.inner_model.process_latent_in(latent_image)
 
