@@ -31,7 +31,6 @@ import node_helpers
 from app.frontend_management import FrontendManager
 from app.user_manager import UserManager
 from logger import set_request_context
-from model_filemanager import download_model, DownloadModelStatus
 from app.model_manager import ModelFileManager
 from typing import Optional
 from api_server.routes.internal.internal_routes import InternalRoutes
