@@ -27,7 +27,7 @@ if __name__ == "__main__":
 from openapi_utils import get_global_queue_task_id, queue_update_request, build_openapi_item, set_global_queue_task_id
 
 # setup_logger(log_level=args.verbose)
-setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
+# setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
 
 def apply_custom_paths():
     # extra model paths
@@ -222,7 +222,7 @@ def handle_execution_result(e, item, server, update_status_url, task_id):
         logging.info(f"Send callback url: {callback_url} , Response status: {response.status_code}")
 
 
-def process_queue_item(queue_item, q, e, server, update_status_url, server_instance):
+def process_queue_item(queue_item, q, e, server_instance, update_status_url):
     execution_start_time = time.perf_counter()
     if q.get_current_queue_length() > 0:
         logging.info(f"Queue pending length is {q.get_current_queue_length()}")
@@ -231,7 +231,7 @@ def process_queue_item(queue_item, q, e, server, update_status_url, server_insta
     set_request_context(item[3]['client_id'])
     task_id = item[3]['client_id']
     prompt_id = item[1]
-    server.last_prompt_id = prompt_id
+    server_instance.last_prompt_id = prompt_id
     logging.info(f"Execute task and wait for {time.time() - item[6]['created']} seconds")
     
     server_instance.last_prompt_id = prompt_id
@@ -246,7 +246,7 @@ def process_queue_item(queue_item, q, e, server, update_status_url, server_insta
     if server_instance.client_id is not None:
                 server_instance.send_sync("executing", {"node": None, "prompt_id": prompt_id}, server_instance.client_id)
 
-    handle_execution_result(e, item, server, update_status_url, task_id)
+    handle_execution_result(e, item, server_instance, update_status_url, task_id)
 
     current_time = time.perf_counter()
     execution_time = current_time - execution_start_time
@@ -276,7 +276,7 @@ def prompt_worker(q, server_instance):
 
             queue_item = q.get(timeout=timeout)
             if queue_item is not None:
-                need_gc = process_queue_item(queue_item, q, e, server, update_status_url, server_instance)
+                need_gc = process_queue_item(queue_item, q, e, server_instance, update_status_url)
             
             flags = q.get_flags()
             free_memory = flags.get("free_memory", False)

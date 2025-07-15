@@ -637,6 +637,9 @@ class PromptServer():
             json_data = self.trigger_on_prompt(json_data)
 
             if "client_id" in json_data:
+                if json_data['client_id'] == '':
+                    json_data['client_id'] = str(uuid.uuid4())
+                    logging.info(f"client_id is None, gen client_id: {json_data['client_id']}")
                 set_request_context(json_data['client_id'])
                 logging.info(f"got prompt, task id: {json_data['client_id']}")
 

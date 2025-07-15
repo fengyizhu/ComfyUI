@@ -1119,13 +1119,6 @@ def load_state_dict_guess_config(ckpt_path, sd, output_vae=True, output_clip=Tru
         logging.debug(f"cache clipvision of : {ckpt_path}")
         model_cache.cache_clipvision(ckpt_path, clipvision)
     
-    model_cache.refresh_cache(ckpt_path)
-    if output_model:
-        model_patcher = comfy.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=model_management.unet_offload_device())
-        if inital_load_device != torch.device("cpu"):
-            logging.info("loaded diffusion model directly to GPU")
-            model_management.load_models_gpu([model_patcher], force_full_load=True)
-
     return (model_patcher, clip, vae, clipvision)
 
 
