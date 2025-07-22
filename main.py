@@ -306,7 +306,7 @@ def prompt_worker(q, server_instance):
                 logging.info("GC took {:.2f} seconds".format(time.time() - start))
 
             if args.get_task:
-                    get_task(q, server)
+                    get_task(q, server_instance)
 
             if (current_time - last_gc_collect) > gc_collect_interval:
                 gc.collect()
