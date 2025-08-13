@@ -321,7 +321,7 @@ def prompt_worker(q, server_instance):
                 logging.info("GC took {:.2f} seconds".format(time.time() - start))
 
             if args.get_task:
-                    get_task(q, server_instance)
+                asyncio.run(get_task(q, server_instance))
 
             if (current_time - last_gc_collect) > gc_collect_interval:
                 gc.collect()
@@ -336,7 +336,7 @@ def prompt_worker(q, server_instance):
             current_time = time.perf_counter()
             continue
 
-def get_task(q, server):
+async def get_task(q, server):
     if args.get_task_url: 
         get_url = args.get_task_url
     if args.get_task_detail_url:
@@ -388,7 +388,6 @@ def get_task(q, server):
 
     json_data = input_data
     if "client_id" in json_data:
-        task_id = json_data['client_id']
         set_request_context(json_data['client_id'])
         logging.info(f"got prompt, task id: {json_data['client_id']}")
 
@@ -404,7 +403,13 @@ def get_task(q, server):
 
     if "prompt" in json_data:
         prompt = json_data["prompt"]
-        valid = execution.validate_prompt(prompt)
+        prompt_id = str(json_data.get("client_id", uuid.uuid4()))
+
+        partial_execution_targets = None
+        if "partial_execution_targets" in json_data:
+            partial_execution_targets = json_data["partial_execution_targets"]
+
+        valid = await execution.validate_prompt(prompt_id, prompt, partial_execution_targets)
         extra_data = {}
         if "extra_data" in json_data:
             extra_data = json_data["extra_data"]
@@ -414,7 +419,6 @@ def get_task(q, server):
 
         if valid[0]:
                 # prompt_id = str(uuid.uuid4())
-                prompt_id = task_id
                 outputs_to_execute = valid[2]
 
     if "sync" in json_data:
