@@ -168,6 +168,7 @@ class PromptServer():
         self.messages = asyncio.Queue()
         self.client_session:Optional[aiohttp.ClientSession] = None
         self.number = 0
+        self.task_loop = True
 
         middlewares = [cache_control]
         if args.enable_compress_response_body:
@@ -627,6 +628,17 @@ class PromptServer():
             queue_info['queue_running'] = current_queue[0]
             queue_info['queue_pending'] = current_queue[1]
             return web.json_response(queue_info)
+        
+        @routes.get("/stop/{sleep}")
+        @routes.get("/stop")
+        async def stop(request):
+            self.task_loop = False
+            sleep_time = 60
+            sleep = request.match_info.get("sleep", None)
+            if sleep:
+                sleep_time = int(sleep)
+            await asyncio.sleep(sleep_time)
+            return web.json_response({"message": "Task stopped", "sleep_time": sleep_time})
 
         @routes.post("/prompt")
         async def post_prompt(request):
