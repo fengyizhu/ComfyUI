@@ -256,6 +256,9 @@ def prompt_worker(q, server):
     time.sleep(15)
 
     while True:
+        if not server_instance.task_loop:
+            time.sleep(10)
+            continue
         try:
             timeout = 0.5
             if need_gc:
@@ -296,6 +299,7 @@ def prompt_worker(q, server):
                     get_task(q, server)
         except Exception as err:
             logging.error("Error in prompt worker: {}".format(err))
+            time.sleep(30)
             e.reset()
             gc.collect()
             current_time = time.perf_counter()
