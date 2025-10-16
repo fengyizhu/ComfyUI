@@ -256,7 +256,7 @@ def prompt_worker(q, server):
     time.sleep(15)
 
     while True:
-        if not server_instance.task_loop:
+        if not server.task_loop:
             time.sleep(10)
             continue
         try:
