@@ -32,6 +32,7 @@ from einops import rearrange
 from comfy.cli_args import args
 
 MMAP_TORCH_FILES = args.mmap_torch_files
+DISABLE_MMAP = args.disable_mmap
 
 ALWAYS_SAFE_LOAD = False
 if hasattr(torch.serialization, "add_safe_globals"):  # TODO: this was added in pytorch 2.4, the unsafe path should be removed once earlier versions are deprecated
@@ -39,7 +40,11 @@ if hasattr(torch.serialization, "add_safe_globals"):  # TODO: this was added in 
         pass
     ModelCheckpoint.__module__ = "pytorch_lightning.callbacks.model_checkpoint"
 
-    from numpy.core.multiarray import scalar
+    def scalar(*args, **kwargs):
+        from numpy.core.multiarray import scalar as sc
+        return sc(*args, **kwargs)
+    scalar.__module__ = "numpy.core.multiarray"
+
     from numpy import dtype
     from numpy.dtypes import Float64DType
     from _codecs import encode
@@ -86,7 +91,10 @@ def load_torch_file(ckpt, safe_load=False, device=None, return_metadata=False):
             with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
                 sd = {}
                 for k in f.keys():
-                    sd[k] = f.get_tensor(k)
+                    tensor = f.get_tensor(k)
+                    if DISABLE_MMAP:  # TODO: Not sure if this is the best way to bypass the mmap issues
+                        tensor = tensor.to(device=device, copy=True)
+                    sd[k] = tensor
                 if return_metadata:
                     metadata = f.metadata()
         except Exception as e:
@@ -724,6 +732,26 @@ def resize_to_batch_size(tensor, batch_size):
 
     return output
 
+def resize_list_to_batch_size(l, batch_size):
+    in_batch_size = len(l)
+    if in_batch_size == batch_size or in_batch_size == 0:
+        return l
+
+    if batch_size <= 1:
+        return l[:batch_size]
+
+    output = []
+    if batch_size < in_batch_size:
+        scale = (in_batch_size - 1) / (batch_size - 1)
+        for i in range(batch_size):
+            output.append(l[min(round(i * scale), in_batch_size - 1)])
+    else:
+        scale = in_batch_size / batch_size
+        for i in range(batch_size):
+           output.append(l[min(math.floor((i + 0.5) * scale), in_batch_size - 1)])
+
+    return output
+
 def convert_sd_to(state_dict, dtype):
     keys = list(state_dict.keys())
     for k in keys:
@@ -1028,11 +1056,12 @@ def set_progress_bar_global_hook(function):
     PROGRESS_BAR_HOOK = function
 
 class ProgressBar:
-    def __init__(self, total):
+    def __init__(self, total, node_id=None):
         global PROGRESS_BAR_HOOK
         self.total = total
         self.current = 0
         self.hook = PROGRESS_BAR_HOOK
+        self.node_id = node_id
 
     def update_absolute(self, value, total=None, preview=None):
         if total is not None:
@@ -1041,7 +1070,7 @@ class ProgressBar:
             value = self.total
         self.current = value
         if self.hook is not None:
-            self.hook(self.current, self.total, preview)
+            self.hook(self.current, self.total, preview, node_id=self.node_id)
 
     def update(self, value):
         self.update_absolute(self.current + value)

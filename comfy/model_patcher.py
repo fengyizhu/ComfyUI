@@ -123,16 +123,30 @@ def move_weight_functions(m, device):
     return memory
 
 class LowVramPatch:
-    def __init__(self, key, patches):
+    def __init__(self, key, patches, convert_func=None, set_func=None):
         self.key = key
         self.patches = patches
+        self.convert_func = convert_func
+        self.set_func = set_func
+
     def __call__(self, weight):
         intermediate_dtype = weight.dtype
+        if self.convert_func is not None:
+            weight = self.convert_func(weight.to(dtype=torch.float32, copy=True), inplace=True)
+
         if intermediate_dtype not in [torch.float32, torch.float16, torch.bfloat16]: #intermediate_dtype has to be one that is supported in math ops
             intermediate_dtype = torch.float32
-            return comfy.float.stochastic_rounding(comfy.lora.calculate_weight(self.patches[self.key], weight.to(intermediate_dtype), self.key, intermediate_dtype=intermediate_dtype), weight.dtype, seed=string_to_seed(self.key))
+            out = comfy.lora.calculate_weight(self.patches[self.key], weight.to(intermediate_dtype), self.key, intermediate_dtype=intermediate_dtype)
+            if self.set_func is None:
+                return comfy.float.stochastic_rounding(out, weight.dtype, seed=string_to_seed(self.key))
+            else:
+                return self.set_func(out, seed=string_to_seed(self.key), return_weight=True)
 
-        return comfy.lora.calculate_weight(self.patches[self.key], weight, self.key, intermediate_dtype=intermediate_dtype)
+        out = comfy.lora.calculate_weight(self.patches[self.key], weight, self.key, intermediate_dtype=intermediate_dtype)
+        if self.set_func is not None:
+            return self.set_func(out, seed=string_to_seed(self.key), return_weight=True).to(dtype=intermediate_dtype)
+        else:
+            return out
 
 def get_key_weight(model, key):
     set_func = None
@@ -430,6 +444,12 @@ class ModelPatcher:
     def set_model_forward_timestep_embed_patch(self, patch):
         self.set_model_patch(patch, "forward_timestep_embed_patch")
 
+    def set_model_double_block_patch(self, patch):
+        self.set_model_patch(patch, "double_block")
+
+    def set_model_post_input_patch(self, patch):
+        self.set_model_patch(patch, "post_input")
+
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
 
@@ -485,6 +505,30 @@ class ModelPatcher:
             wrap_func = self.model_options["model_function_wrapper"]
             if hasattr(wrap_func, "to"):
                 self.model_options["model_function_wrapper"] = wrap_func.to(device)
+
+    def model_patches_models(self):
+        to = self.model_options["transformer_options"]
+        models = []
+        if "patches" in to:
+            patches = to["patches"]
+            for name in patches:
+                patch_list = patches[name]
+                for i in range(len(patch_list)):
+                    if hasattr(patch_list[i], "models"):
+                        models += patch_list[i].models()
+        if "patches_replace" in to:
+            patches = to["patches_replace"]
+            for name in patches:
+                patch_list = patches[name]
+                for k in patch_list:
+                    if hasattr(patch_list[k], "models"):
+                        models += patch_list[k].models()
+        if "model_function_wrapper" in self.model_options:
+            wrap_func = self.model_options["model_function_wrapper"]
+            if hasattr(wrap_func, "models"):
+                models += wrap_func.models()
+
+        return models
 
     def model_dtype(self):
         if hasattr(self.model, "get_dtype"):
@@ -627,13 +671,15 @@ class ModelPatcher:
                         if force_patch_weights:
                             self.patch_weight_to_device(weight_key)
                         else:
-                            m.weight_function = [LowVramPatch(weight_key, self.patches)]
+                            _, set_func, convert_func = get_key_weight(self.model, weight_key)
+                            m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
                             patch_counter += 1
                     if bias_key in self.patches:
                         if force_patch_weights:
                             self.patch_weight_to_device(bias_key)
                         else:
-                            m.bias_function = [LowVramPatch(bias_key, self.patches)]
+                            _, set_func, convert_func = get_key_weight(self.model, bias_key)
+                            m.bias_function = [LowVramPatch(bias_key, self.patches, convert_func, set_func)]
                             patch_counter += 1
 
                     cast_weight = True
@@ -795,10 +841,12 @@ class ModelPatcher:
                         module_mem += move_weight_functions(m, device_to)
                         if lowvram_possible:
                             if weight_key in self.patches:
-                                m.weight_function.append(LowVramPatch(weight_key, self.patches))
+                                _, set_func, convert_func = get_key_weight(self.model, weight_key)
+                                m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
                                 patch_counter += 1
                             if bias_key in self.patches:
-                                m.bias_function.append(LowVramPatch(bias_key, self.patches))
+                                _, set_func, convert_func = get_key_weight(self.model, bias_key)
+                                m.bias_function.append(LowVramPatch(bias_key, self.patches, convert_func, set_func))
                                 patch_counter += 1
                             cast_weight = True
 
