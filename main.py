@@ -8,7 +8,6 @@ import importlib.util
 import folder_paths
 import time
 import json
-import uuid
 import requests
 
 from logger import set_request_context
@@ -21,6 +20,8 @@ import sys
 from comfy_execution.progress import get_progress_state
 from comfy_execution.utils import get_executing_context
 from comfy_api import feature_flags
+
+from comfy_worker import ComfyWorker, WorkerConfig
 
 if __name__ == "__main__":
     #NOTE: These do not do anything on core ComfyUI, they are for custom nodes.
@@ -554,6 +555,16 @@ def start_comfyui(asyncio_loop=None):
             worker_thread.join()
 
     threading.Thread(target=monitor_thread, args=(prompt_server.prompt_queue, prompt_server,), daemon=True).start()
+
+    # 启动ComfyWorker
+    comfy_worker = ComfyWorker(
+        WorkerConfig.from_env(),
+        prompt_server,
+        endpoint=endpoint,
+        cache_lru=args.cache_lru,
+        cache_none=args.cache_none
+    )
+    comfy_worker.start()
 
     if args.quick_test_for_ci:
         exit(0)
