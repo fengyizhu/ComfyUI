@@ -190,8 +190,14 @@ def post_request(url, body):
 
 def handle_failed_execution(e, item, pull_task, task_id):
     err = e.status_messages[2][1]
-    response = dict(code=err['code'], message=err['exception_message'], node_id=err['node_id'],
-                        timestamp=int(time.time()), task_id=task_id, openapi_item=item[6])
+    response = {
+        "code": err.get('code', 500),
+        "message": err.get('exception_message', 'INTERNAL ERROR'),
+        "node_id": err.get('node_id', 0),
+        "timestamp": int(time.time()),
+        "task_id": task_id,
+        "openapi_item": item[6] if len(item) > 6 else None
+    }
     queue_response = None
     if pull_task:
         queue_response = queue_update_request(get_global_queue_task_id(), TASK_FAILED, response)
