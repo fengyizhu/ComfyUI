@@ -64,10 +64,10 @@ def load_torch_file(ckpt, safe_load=False, device=None, return_metadata=False):
             if metadata:
                 return (cache_sd, metadata)
             else:
+                sd = {}
                 if ckpt.lower().endswith(".safetensors") or ckpt.lower().endswith(".sft"):
                     try:
                         with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
-                            sd = {}
                             for k in f.keys():
                                 sd[k] = f.get_tensor(k)
                             if return_metadata:
@@ -80,7 +80,7 @@ def load_torch_file(ckpt, safe_load=False, device=None, return_metadata=False):
                             if "MetadataIncompleteBuffer" in message:
                                 raise ValueError("{}\n\nFile path: {}\n\nThe safetensors file is corrupt/incomplete. Check the file size and make sure you have copied/downloaded it correctly.".format(message, ckpt))
                         raise e
-                model_cache.cache_sd(ckpt + "-metadata", "model")
+                model_cache.cache_sd(ckpt + "-metadata", sd)
                 return (cache_sd, metadata)
         else:
             return cache_sd
