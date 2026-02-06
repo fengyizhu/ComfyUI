@@ -56,6 +56,8 @@ else:
     logging.info("Warning, you are using an old pytorch version and some ckpt/pt files might be loaded unsafely. Upgrading to 2.4 or above is recommended.")
 
 def load_torch_file(ckpt, safe_load=False, device=None, return_metadata=False):
+    if device is None:
+        device = torch.device("cpu")
     metadata = None
     cache_sd = model_cache.get_cpu_model(ckpt, 'sd')
     metadata = model_cache.get_cpu_model(ckpt + "-metadata", "model")
