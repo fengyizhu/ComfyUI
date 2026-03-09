@@ -6,16 +6,19 @@ import requests
 from bella_openapi import BellaWorker, WorkerConfig
 from bella_openapi.worker.models import QueueTask
 
+from logger import set_request_context
+
 import execution
-from openapi_utils import set_global_queue_task_id
+from openapi_utils import set_global_queue_task_id, build_openapi_item, get_global_pull_task_tag, set_global_pull_task_tag
 
 
 class ComfyWorker:
 
-    def __init__(self, config: WorkerConfig, server_instance, endpoint: str, cache_lru: int = 0, cache_none: bool = False):
+    def __init__(self, config: WorkerConfig, server_instance, endpoint: str, cache_lru: int = 0, cache_none: bool = False, queue: execution.PromptQueue = None):
         """
         初始化ComfyWorker
         """
+        self.queue = queue
         self.config = config
         self.server_instance = server_instance
         self.endpoint = endpoint
@@ -67,83 +70,50 @@ class ComfyWorker:
 
     async def _process_task_with_callback(self, task: QueueTask) -> dict[str, object]:
         """任务处理包装器：执行任务并发送回调"""
-        result = await self._process_task(task)
 
-        # 发送回调（异步非阻塞，不等待回调完成）
-        callback_url = task.data.get("callback_url")
-        if callback_url:
-            loop = asyncio.get_event_loop()
-            loop.run_in_executor(
-                None,
-                lambda: requests.post(callback_url, json={"task_id": task.task_id, "result": result}, timeout=30)
-            )
+        json_data = task.data
+        if "client_id" in json_data:
+            task_id = json_data['client_id']
+            set_request_context(json_data['client_id'])
+            logging.info(f"got prompt, task id: {json_data['client_id']}")
+
+        if "number" in json_data:
+            number = float(json_data['number'])
+        else:
+            number = self.server_instance.number
+            if "front" in json_data:
+                if json_data['front']:
+                    number = -number
+
+            self.server_instance.number += 1
+
+        if "prompt" in json_data:
+            prompt = json_data["prompt"]
+            prompt_id = task_id if task_id else str(uuid.uuid4())
+            partial_execution_targets = None
+            if "partial_execution_targets" in json_data:
+                partial_execution_targets = json_data["partial_execution_targets"]
+            valid = await execution.validate_prompt(prompt_id, prompt, partial_execution_targets)
+            extra_data = {}
+            if "extra_data" in json_data:
+                extra_data = json_data["extra_data"]
+
+            if "client_id" in json_data:
+                extra_data["client_id"] = json_data["client_id"]
+
+            if valid[0]:
+                    # prompt_id = str(uuid.uuid4())
+                    # prompt_id = task_id
+                    outputs_to_execute = valid[2]
+
+        if "sync" in json_data:
+            json_data["sync"] = False
+        openapi_item = build_openapi_item(json_data, True, True)
+
+        set_global_pull_task_tag(True)
+        self.queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute, None, openapi_item))
+        while get_global_pull_task_tag():
+            await asyncio.sleep(0.1)
+
+        result = None
         return result
-
-    async def _process_task(self, task: QueueTask) -> dict[str, object]:
-        """处理单个ComfyUI任务（纯任务处理逻辑）"""
-        queue_task_id = task.task_id
-        data = task.data
-
-        # 设置全局任务ID上下文
-        set_global_queue_task_id(queue_task_id)
-
-        try:
-            # 1. 验证任务数据
-            if "prompt" not in data:
-                self.logger.error(f"No prompt in task {queue_task_id}")
-                result = {"error": "No prompt in task data"}
-                return result
-
-            # 2. 验证prompt结构
-            valid = execution.validate_prompt(data["prompt"])
-            if not valid[0]:
-                self.logger.error(f"Invalid prompt for task {queue_task_id}: {valid[1]}")
-                result = {"error": valid[1], "node_errors": valid[3]}
-                return result
-
-            # 3. 准备任务数据
-            task_id = data.get('client_id', queue_task_id)
-            prompt = data["prompt"]
-
-            # 准备extra_data
-            extra_data = data.get("extra_data", {})
-            if "client_id" in data:
-                extra_data["client_id"] = data["client_id"]
-
-            # 输出节点
-            outputs_to_execute = valid[2]
-
-            self.logger.info(f"Executing task {task_id} (queue_task_id: {queue_task_id})")
-
-            # 4. 直接执行工作流（同步等待完成）
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                self.executor.execute,
-                prompt,
-                task_id,
-                extra_data,
-                outputs_to_execute
-            )
-
-            # 5. 检查执行结果
-            if not self.executor.success:
-                error_msg = "\n".join(self.executor.status_messages) if self.executor.status_messages else "Execution failed"
-                self.logger.error(f"Task {task_id} failed: {error_msg}")
-                result = {
-                    "error": error_msg,
-                    "node_errors": self.executor.history_result.get("node_errors", {})
-                }
-                return result
-
-            # 6. 返回成功结果
-            self.logger.info(f"Task {task_id} completed successfully")
-            result = self.executor.history_result
-            return result
-
-        except asyncio.CancelledError:
-            self.logger.warning(f"Task {queue_task_id} cancelled")
-            return {"error": "Task cancelled"}
-        except Exception as e:
-            self.logger.error(f"Error processing task {queue_task_id}: {e}", exc_info=True)
-            return {"error": str(e)}

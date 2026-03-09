@@ -21,14 +21,13 @@ from comfy_execution.progress import get_progress_state
 from comfy_execution.utils import get_executing_context
 from comfy_api import feature_flags
 
-from comfy_worker import ComfyWorker, WorkerConfig
 
 if __name__ == "__main__":
     #NOTE: These do not do anything on core ComfyUI, they are for custom nodes.
     os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
     os.environ['DO_NOT_TRACK'] = '1'
 
-from openapi_utils import get_global_queue_task_id, queue_update_request, build_openapi_item, set_global_queue_task_id
+from openapi_utils import get_global_queue_task_id, queue_update_request, build_openapi_item, set_global_queue_task_id, set_global_pull_task_tag
 
 # setup_logger(log_level=args.verbose)
 # setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
@@ -335,6 +334,9 @@ def prompt_worker(q, server_instance):
             if args.get_task:
                     get_task(q, server_instance)
 
+            if q.get_current_queue_length() < 1:
+                set_global_pull_task_tag(False)
+
             if (current_time - last_gc_collect) > gc_collect_interval:
                 gc.collect()
                 comfy.model_management.soft_empty_cache()
@@ -517,6 +519,7 @@ def start_comfyui(asyncio_loop=None):
     Starts the ComfyUI server using the provided asyncio event loop or creates a new one.
     Returns the event loop, server instance, and a function to start the server asynchronously.
     """
+    from comfy_worker import ComfyWorker, WorkerConfig
     if args.temp_directory:
         temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
         logging.info(f"Setting temp directory to: {temp_dir}")
@@ -561,8 +564,8 @@ def start_comfyui(asyncio_loop=None):
         WorkerConfig.from_env(),
         prompt_server,
         endpoint=endpoint,
-        cache_lru=args.cache_lru,
-        cache_none=args.cache_none
+        cache_none=args.cache_none,
+        queue=prompt_server.prompt_queue
     )
     comfy_worker.start()
 

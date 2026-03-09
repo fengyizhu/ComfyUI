@@ -19,6 +19,15 @@ def set_global_api_call(api_call_):
 def get_global_api_call():
     return api_call
 
+pull_task_tag = False
+
+def set_global_pull_task_tag(pull_task_tag_):
+    global pull_task_tag
+    pull_task_tag = pull_task_tag_
+
+def get_global_pull_task_tag():
+    return pull_task_tag
+
 def build_openapi_item(json_data, pull_task, api_call=False):
     openapi_item = {
         "callback_url": json_data["callback_url"] if "callback_url" in json_data else None,
