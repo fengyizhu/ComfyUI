@@ -28,4 +28,3 @@ pympler
 spandrel
 pydantic~=2.0
 pydantic-settings~=2.0
-bella_openapi>=1.0.5

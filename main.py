@@ -276,7 +276,7 @@ def process_queue_item(queue_item, q, e, server_instance, update_status_url):
     logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
     return need_gc
 
-def prompt_worker(q, server_instance):
+def prompt_worker(q, server_instance, comfy_worker):
     current_time: float = 0.0
     cache_type = execution.CacheType.CLASSIC
     if args.cache_lru > 0:
@@ -290,11 +290,17 @@ def prompt_worker(q, server_instance):
     gc_collect_interval = 10.0
     update_status_url = args.update_task_status_url if args.update_task_status_url else None
     time.sleep(15)
+    # 启动ComfyWorker
+    thread = threading.Thread(target=comfy_worker.start, daemon=True).start()
+    worker_active = True
 
     while True:
-        # if not server_instance.task_loop:
-        #     time.sleep(10)
-        #     continue
+        if not server_instance.task_loop:
+            if worker_active:
+                comfy_worker.stop()
+                worker_active = False
+            time.sleep(10)
+            continue
         try:
             timeout = 0.5
             if need_gc:
@@ -515,11 +521,11 @@ def setup_database():
 
 
 def start_comfyui(asyncio_loop=None):
+    from comfy_worker import ComfyWorker, WorkerConfig
     """
     Starts the ComfyUI server using the provided asyncio event loop or creates a new one.
     Returns the event loop, server instance, and a function to start the server asynchronously.
     """
-    from comfy_worker import ComfyWorker, WorkerConfig
     if args.temp_directory:
         temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
         logging.info(f"Setting temp directory to: {temp_dir}")
@@ -550,24 +556,23 @@ def start_comfyui(asyncio_loop=None):
 
     prompt_server.add_routes()
     hijack_progress(prompt_server)
-
-    def monitor_thread(q, server):
-        while True:
-            worker_thread = threading.Thread(target=prompt_worker, args=(q, server,), daemon=True)
-            worker_thread.start()
-            worker_thread.join()
-
-    threading.Thread(target=monitor_thread, args=(prompt_server.prompt_queue, prompt_server,), daemon=True).start()
-
-    # 启动ComfyWorker
+    
     comfy_worker = ComfyWorker(
         WorkerConfig.from_env(),
         prompt_server,
         endpoint=endpoint,
+        cache_lru=args.cache_lru,
         cache_none=args.cache_none,
         queue=prompt_server.prompt_queue
     )
-    comfy_worker.start()
+
+    def monitor_thread(q, server, comfy_worker):
+        while True:
+            worker_thread = threading.Thread(target=prompt_worker, args=(q, server, comfy_worker,), daemon=True)
+            worker_thread.start()
+            worker_thread.join()
+
+    threading.Thread(target=monitor_thread, args=(prompt_server.prompt_queue, prompt_server, comfy_worker,), daemon=True).start()
 
     if args.quick_test_for_ci:
         exit(0)
