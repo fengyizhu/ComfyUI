@@ -292,9 +292,9 @@ def prompt_worker(q, server_instance):
     time.sleep(15)
 
     while True:
-        if not server_instance.task_loop:
-            time.sleep(10)
-            continue
+        # if not server_instance.task_loop:
+        #     time.sleep(10)
+        #     continue
         try:
             timeout = 0.5
             if need_gc:
@@ -334,7 +334,7 @@ def prompt_worker(q, server_instance):
             if args.get_task:
                     get_task(q, server_instance)
 
-            if q.get_current_queue_length() < 1:
+            if q.get_current_queue_length() < 1 and server_instance.task_loop:
                 set_global_pull_task_tag(False)
 
             if (current_time - last_gc_collect) > gc_collect_interval:
